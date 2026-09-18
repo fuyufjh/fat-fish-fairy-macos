@@ -43,8 +43,16 @@ actor DeepSeekClient {
         let endpoint = try configuration.endpoint()
         let fallbackActivity = activities.first ?? "idle"
         let example = String(decoding: try JSONSerialization.data(withJSONObject: ["speech": "", "activity": fallbackActivity, "memories": []] as [String: Any]), as: UTF8.self)
+        let timeZone = TimeZone.current
+        let clock = DateFormatter()
+        clock.locale = Locale(identifier: "en_US_POSIX")
+        clock.calendar = Calendar(identifier: .gregorian)
+        clock.timeZone = timeZone
+        clock.dateFormat = "yyyy-MM-dd HH:mm:ss XXX"
+        let currentTime = clock.string(from: Date())
         let system = """
         \(personality)
+        当前本地日期和时间：\(currentTime)（时区：\(timeZone.identifier)）。这是本次请求的时间，历史消息可能发生在更早时间。
         你是 macOS 桌面宠物 FatFishFairy。严格只输出一个 json 对象，完整格式为：
         \(example)
         speech 必须是字符串，activity 必须从 \(activities.joined(separator: ", ")) 选择，memories 必须是字符串数组。
