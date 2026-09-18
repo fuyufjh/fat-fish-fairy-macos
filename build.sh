@@ -86,7 +86,7 @@ if [ "$MAKE_DMG" = 1 ]; then
 
 1. 将 FatFishFairy.app 拖到 Applications 文件夹，然后推出此磁盘映像。
 2. 从「应用程序」打开小肥鱼。
-3. 在设置的「模型连接」中填写 API Key 并保存。可修改 Base URL、Model 和高级思考选项；密钥保存在 macOS 钥匙串。
+3. 在设置的「模型连接」中填写 API Key 并保存。可修改 Base URL、Model 和高级思考选项；密钥随配置保存在本机。
 4. 按提示授予小肥鱼屏幕录制权限，再开启自动观察。
 
 需要 macOS 14 或更新版本。识图和对话默认使用 deepseek-flash，可在设置中修改。

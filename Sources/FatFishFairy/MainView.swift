@@ -210,8 +210,6 @@ struct MainView: View {
 private struct ConnectionSettingsView: View {
     @ObservedObject var model: FishModel
     @State private var configuration = APIConfiguration()
-    @State private var apiKey = ""
-    @State private var removeKey = false
     @State private var feedback = ""
     @State private var failed = false
     var body: some View {
@@ -223,12 +221,8 @@ private struct ConnectionSettingsView: View {
                 TextField("deepseek-flash", text: $configuration.model).accessibilityLabel("Model")
             }
             LabeledContent("API Key") {
-                SecureField("输入密钥；留空保留此地址已存的密钥", text: $apiKey).accessibilityLabel("API Key")
+                SecureField("API Key", text: $configuration.apiKey).accessibilityLabel("API Key")
             }
-            Text(model.hasKey ? "当前连接已保存密钥。密钥按 Base URL 分别保存在本机钥匙串。" : "尚未配置密钥。填写后点击保存即可开始聊天。")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-            Toggle("清除此地址的已存密钥", isOn: $removeKey)
-                .onChange(of: removeKey) { _, value in if value { apiKey = "" } }
             DisclosureGroup("高级选项") {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("thinking · 思考模式", selection: $configuration.thinkingEnabled) {
@@ -245,16 +239,15 @@ private struct ConnectionSettingsView: View {
             HStack {
                 Button("保存连接配置") {
                     do {
-                        try model.saveConnection(configuration, apiKey: apiKey, removeKey: removeKey)
+                        try model.saveConnection(configuration)
                         configuration = model.preferences.api
-                        apiKey = ""; removeKey = false; failed = false
+                        failed = false
                         feedback = "已保存"
                     } catch { failed = true; feedback = error.localizedDescription }
                 }.buttonStyle(.borderedProminent)
-                Text(feedback == "已保存" && (configuration != model.preferences.api || !apiKey.isEmpty || removeKey) ? "尚未保存更改" : feedback).foregroundStyle(failed ? Color.red : Color.secondary).font(.system(size: 11))
+                Text(feedback == "已保存" && configuration != model.preferences.api ? "尚未保存更改" : feedback).foregroundStyle(failed ? Color.red : Color.secondary).font(.system(size: 11))
             }
         }.textFieldStyle(.roundedBorder)
             .onAppear { configuration = model.preferences.api }
-            .onChange(of: apiKey) { _, value in if !value.isEmpty { removeKey = false } }
     }
 }

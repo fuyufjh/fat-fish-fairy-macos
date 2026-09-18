@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
     @Published var bubble = "本肥鱼已就位。\n双击我，聊两句？"
     @Published var activity = "idle"
     @Published var busy = false
-    @Published var hasKey = false
+    var hasKey: Bool { !preferences.api.apiKey.isEmpty }
     @Published var screenPermission = ScreenCapture.hasPermission
     @Published var error: String?
     @Published var draft = ""
@@ -23,8 +23,6 @@ import UniformTypeIdentifiers
     @Published var sessionActive = true
     let store = StateStore()
     private let client = DeepSeekClient(diagnosticsURL: StateStore().directory.appendingPathComponent("last-request.json"))
-    private var key: String?
-    private let credentialStore = APIKeyStore()
     private var requestTask: Task<Void, Never>?
     private var timer: Timer?
     private var bubbleTask: Task<Void, Never>?
@@ -44,16 +42,10 @@ import UniformTypeIdentifiers
         preferences = state.preferences; messages = state.messages; memories = state.memories
         if let loadError { self.error = loadError; loadFailed = true }
         themes += FishTheme.imported(from: themeRoot)
-        reloadCredentials()
         nextObservation = Date().addingTimeInterval(8)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-    }
-
-    func reloadCredentials() {
-        do { key = try credentialStore.load(account: preferences.api.baseURL); hasKey = key != nil }
-        catch { key = nil; hasKey = false; self.error = error.localizedDescription }
     }
 
     func persist() {
@@ -111,7 +103,8 @@ import UniformTypeIdentifiers
     }
 
     private func run(text: String, observation: Bool, attachment: Data?) {
-        guard let key else { error = "请先在设置中配置 API Key。"; return }
+        let key = preferences.api.apiKey
+        guard !key.isEmpty else { error = "请先在设置中配置 API Key。"; return }
         error = nil; busy = true; activity = "thinking"
         status = observation ? "V · 正在看屏幕…" : "F · 小肥鱼想一想…"
         let requestID = UUID(); generation = requestID
@@ -178,20 +171,13 @@ import UniformTypeIdentifiers
         persist()
     }
 
-    func saveConnection(_ configuration: APIConfiguration, apiKey: String, removeKey: Bool) throws {
+    func saveConnection(_ configuration: APIConfiguration) throws {
         guard !loadFailed else { throw FishError.message("请先修复本地记录，再保存配置。") }
-        let clean = try configuration.validated()
-        let entered = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Blank input retains only the key belonging to this exact API base URL.
-        let savedKey = removeKey ? nil : (entered.isEmpty ? try credentialStore.load(account: clean.baseURL) : entered)
         var updated = preferences
-        updated.connection = clean
-        let oldKey = try credentialStore.load(account: clean.baseURL)
-        try credentialStore.save(savedKey, account: clean.baseURL)
-        do { try store.save(SavedState(preferences: updated, messages: Array(messages.suffix(200)), memories: memories)) }
-        catch { try? credentialStore.save(oldKey, account: clean.baseURL); throw error }
+        updated.connection = try configuration.validated()
+        try store.save(SavedState(preferences: updated, messages: Array(messages.suffix(200)), memories: memories))
         cancel()
-        preferences = updated; key = savedKey; hasKey = savedKey != nil
+        preferences = updated
         failures = 0; error = nil; status = hasKey ? "连接配置已保存" : "等待配置 API Key"
     }
 

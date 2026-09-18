@@ -22,20 +22,23 @@ struct ConfigurationTests {
         try SmokeTests.check(config.reasoningEffort == .high, "enabling thinking selects high")
         config.thinkingEnabled = false
         try SmokeTests.check(config.reasoningEffort == .none, "disabling thinking selects none")
-        let keychain = APIKeyStore(service: "com.fatfishfairy.tests." + UUID().uuidString)
-        defer { try? keychain.save(nil, account: "test") }
-        let empty = try keychain.load(account: "test")
-        try SmokeTests.check(empty == nil, "key defaults empty")
-        try keychain.save("fake-key", account: "test")
-        let loaded = try keychain.load(account: "test")
-        let other = try keychain.load(account: "other-provider")
-        try SmokeTests.check(loaded == "fake-key" && other == nil, "keychain provider isolation")
-        try keychain.save("replacement", account: "test")
-        let replaced = try keychain.load(account: "test")
-        try SmokeTests.check(replaced == "replacement", "keychain key replacement")
-        try keychain.save(nil, account: "test")
-        let removed = try keychain.load(account: "test")
-        try SmokeTests.check(removed == nil, "keychain key deletion")
+        let previous = Data("{\"baseURL\":\"https://example.org/v1\",\"model\":\"custom\",\"reasoningEffort\":\"low\"}".utf8)
+        let previousConfig = try JSONDecoder().decode(APIConfiguration.self, from: previous)
+        try SmokeTests.check(previousConfig.apiKey.isEmpty && previousConfig.model == "custom" && previousConfig.reasoningEffort == .low, "previous connection loads with empty key")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = StateStore(directory: directory)
+        var state = SavedState()
+        config.apiKey = "fake-key"
+        state.preferences.connection = config
+        try store.save(state)
+        let loaded = try store.load()
+        try SmokeTests.check(loaded.preferences.api.apiKey == "fake-key", "API key survives state reload")
+        config.apiKey = ""
+        state.preferences.connection = config
+        try store.save(state)
+        let cleared = try store.load()
+        try SmokeTests.check(cleared.preferences.api.apiKey.isEmpty, "empty field clears saved API key")
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [StubProtocol.self]
         let session = URLSession(configuration: sessionConfig)
