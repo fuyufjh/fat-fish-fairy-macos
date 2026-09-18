@@ -3,6 +3,8 @@ import Foundation
 final class StubProtocol: URLProtocol {
     static var responses: [(Int, Data)] = []
     static var bodies: [[String: Any]] = []
+    static var urls: [String] = []
+    static var authorizations: [String] = []
     static let lock = NSLock()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -18,6 +20,8 @@ final class StubProtocol: URLProtocol {
             }
         }
         Self.lock.lock()
+        Self.urls.append(request.url!.absoluteString)
+        Self.authorizations.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
         Self.bodies.append((try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:])
         let response = Self.responses.isEmpty ? (500, Data()) : Self.responses.removeFirst()
         Self.lock.unlock()
@@ -29,7 +33,7 @@ final class StubProtocol: URLProtocol {
     override func stopLoading() {}
     static func reset(_ responses: [(Int, Data)]) {
         lock.lock(); defer { lock.unlock() }
-        Self.responses = responses; bodies = []
+        Self.responses = responses; bodies = []; urls = []; authorizations = []
     }
 }
 

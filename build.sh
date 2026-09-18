@@ -57,7 +57,7 @@ cp "$BIN_DIR/FatFishFairy" "$APP/Contents/MacOS/FatFishFairy"
 ditto "$ROOT/Sources/FatFishFairy/Resources/Themes" "$APP/Contents/Resources/Themes"
 swift "$ROOT/scripts/make-icon.swift" "$WORK/FatFish.iconset"
 iconutil -c icns "$WORK/FatFish.iconset" -o "$APP/Contents/Resources/FatFish.icns"
-APP_PATH="$APP" PROJECT_PATH="$ROOT" VERSION_VALUE="$APP_VERSION" python3 - <<'PY'
+APP_PATH="$APP" VERSION_VALUE="$APP_VERSION" python3 - <<'PY'
 import os, plistlib
 info = {
     'CFBundleName': 'FatFishFairy', 'CFBundleDisplayName': '小肥鱼',
@@ -65,8 +65,7 @@ info = {
     'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': os.environ['VERSION_VALUE'],
     'CFBundleIconFile': 'FatFish', 'CFBundleVersion': '1',
     'LSMinimumSystemVersion': '14.0', 'NSHighResolutionCapable': True,
-    'NSScreenCaptureUsageDescription': '小肥鱼需要查看屏幕，并将截图发送给 DeepSeek 来陪你聊天。',
-    'FatFishProjectDirectory': os.environ['PROJECT_PATH'],
+    'NSScreenCaptureUsageDescription': '小肥鱼需要查看屏幕，并将截图发送给你配置的 API 服务来陪你聊天。',
     'NSHumanReadableCopyright': 'FatFishFairy macOS · Inspired by vczh/FatFishFairy',
 }
 with open(os.environ['APP_PATH'] + '/Contents/Info.plist', 'wb') as output:
@@ -87,10 +86,10 @@ if [ "$MAKE_DMG" = 1 ]; then
 
 1. 将 FatFishFairy.app 拖到 Applications 文件夹，然后推出此磁盘映像。
 2. 从「应用程序」打开小肥鱼。
-3. 在设置中选择包含 DEEPSEEK_API_KEY=你的密钥 的 .secret 文件。
+3. 在设置的「模型连接」中填写 API Key 并保存。可修改 Base URL、Model 和高级思考选项；密钥保存在 macOS 钥匙串。
 4. 按提示授予小肥鱼屏幕录制权限，再开启自动观察。
 
-需要 macOS 14 或更新版本。识图和对话使用 deepseek-flash。
+需要 macOS 14 或更新版本。识图和对话默认使用 deepseek-flash，可在设置中修改。
 已内置默认形象「萝莉小妹抖」，无需另行下载或导入。
 安装包不包含 API 密钥、聊天记录、记忆或导入的主题。
 默认构建仅本机签名，未经过 Apple 公证。

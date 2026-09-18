@@ -56,3 +56,13 @@
 - Computer 的坐标拖动接口对不激活的悬浮面板返回 `noWindowsAvailable`，未能自动完成拖动测试。拖动由 AppKit `performDrag(with:)` 实现，位置保存与恢复有离线覆盖。
 - 未主动锁定用户电脑、切换会话或拔插显示器；这些路径已实现事件监听、取消请求与可见区域恢复，但未做实机扰动测试。
 - 未进行 Developer ID 签名、公证、跨机器安装或 Intel 构建验证。
+
+
+## UI 模型配置（2026-09-18）
+
+- 用设置表单替换 `.secret` / 环境变量读取；默认官方 DeepSeek Base URL、`deepseek-flash`、空 API Key、`thinking=disabled` 和 `reasoning_effort=none`。
+- 密钥存入 macOS 钥匙串，按 Base URL 隔离；旧配置文件兼容迁移并保留原有聊天与偏好。保存失败不切换运行配置。
+- 122 项离线检查通过，覆盖旧数据迁移、URL 校验、钥匙串新增/替换/删除及地址隔离、四档思考参数和自定义请求地址/模型/授权头。
+- Computer Use 实测默认控件、无效 URL 拒绝保存、low 与 enabled 联动、保存和重启恢复；测试结束恢复 disabled/none，密钥保持为空。
+- 真实 deepseek-flash 对话、单图识别和多图回复格式测试通过，仅发送测试文字及合成图片。多图合成颜色判断不完全准确，格式及传输通过不代表视觉准确率保证。
+- Release App 编译、签名校验和 DMG 校验通过；安装包不包含密钥或开发机项目路径。

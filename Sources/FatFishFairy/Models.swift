@@ -22,7 +22,8 @@ struct Preferences: Codable {
     var automatic = false
     var allDisplays = true
     var personality = "你是住在用户桌面上的蓝色小肥鱼，圆滚滚、爱摸鱼、贪吃，嘴欠但温暖。对眼前具体细节偶尔吐槽，也会惊喜或关心。不是客服，也不是效率监工。自称本肥鱼。不要反复使用同一梗，不评判用户娱乐。用简短自然的中文说话。"
-    var credentialPath: String?
+    var connection: APIConfiguration?
+    var api: APIConfiguration { connection ?? APIConfiguration() }
     var petX: Double?
     var petY: Double?
 }
@@ -77,20 +78,6 @@ enum FishError: LocalizedError {
     var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
 }
 
-enum SecretParser {
-    static func key(from text: String) -> String? {
-        for line in text.components(separatedBy: .newlines) {
-            var trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("export ") { trimmed = String(trimmed.dropFirst(7)) }
-            guard let equal = trimmed.firstIndex(of: "="), trimmed[..<equal].trimmingCharacters(in: .whitespaces) == "DEEPSEEK_API_KEY" else { continue }
-            var value = String(trimmed[trimmed.index(after: equal)...]).trimmingCharacters(in: .whitespaces)
-            if let first = value.first, (first == "\"" || first == "'"), value.last == first { value = String(value.dropFirst().dropLast()) }
-            return value.isEmpty ? nil : value
-        }
-        return nil
-    }
-}
-
 final class StateStore {
     let directory: URL
     var file: URL { directory.appendingPathComponent("state.json") }
@@ -106,20 +93,6 @@ final class StateStore {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(state).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-    }
-}
-
-enum Credentials {
-    static func load(path: String?) -> String? {
-        if let env = ProcessInfo.processInfo.environment["DEEPSEEK_API_KEY"], !env.isEmpty { return env }
-        var paths: [String] = []
-        if let path { paths.append(path) }
-        if let root = Bundle.main.object(forInfoDictionaryKey: "FatFishProjectDirectory") as? String { paths.append(root + "/.secret") }
-        paths.append(FileManager.default.currentDirectoryPath + "/.secret")
-        for path in paths {
-            if let text = try? String(contentsOfFile: path, encoding: .utf8), let key = SecretParser.key(from: text) { return key }
-        }
-        return nil
     }
 }
 

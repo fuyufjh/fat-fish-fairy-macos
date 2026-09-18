@@ -32,8 +32,6 @@ struct RequestDiagnostics: Codable {
 }
 
 actor DeepSeekClient {
-    static let endpoint = URL(string: "https://api.deepseek.com/chat/completions")!
-    static let model = "deepseek-flash"
     private let session: URLSession
     private let diagnosticsURL: URL?
 
@@ -41,7 +39,8 @@ actor DeepSeekClient {
         self.session = session; self.diagnosticsURL = diagnosticsURL
     }
 
-    func respond(key: String, personality: String, memories: [String], history: [ChatMessage], text: String, images: [Data], observation: Bool, activities: [String]) async throws -> ModelReply {
+    func respond(key: String, configuration: APIConfiguration = APIConfiguration(), personality: String, memories: [String], history: [ChatMessage], text: String, images: [Data], observation: Bool, activities: [String]) async throws -> ModelReply {
+        let endpoint = try configuration.endpoint()
         let fallbackActivity = activities.first ?? "idle"
         let example = String(decoding: try JSONSerialization.data(withJSONObject: ["speech": "", "activity": fallbackActivity, "memories": []] as [String: Any]), as: UTF8.self)
         let system = """
@@ -80,12 +79,14 @@ actor DeepSeekClient {
                 attemptMessages.insert(["role": "system", "content": "上次响应为空、截断或不符合格式。请重新输出一个完整简短的 json 对象。只允许 speech 字符串、activity 字符串、memories 字符串数组；不加说明或代码围栏。安静时也输出完整对象：\(example)"], at: 1)
             }
             let body: [String: Any] = [
-                "model": Self.model, "messages": attemptMessages, "stream": false,
-                "max_tokens": attempt == 0 ? 2048 : 4096, "thinking": ["type": "disabled"],
+                "model": configuration.model, "messages": attemptMessages, "stream": false,
+                "max_tokens": configuration.thinkingEnabled ? (attempt == 0 ? 32768 : 65536) : (attempt == 0 ? 2048 : 4096),
+                "thinking": ["type": configuration.thinkingEnabled ? "enabled" : "disabled"],
+                "reasoning_effort": configuration.reasoningEffort.rawValue,
                 "response_format": ["type": "json_object"]
             ]
-            var request = URLRequest(url: Self.endpoint)
-            request.httpMethod = "POST"; request.timeoutInterval = 75
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"; request.timeoutInterval = configuration.thinkingEnabled ? 300 : 75
             request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -95,10 +96,10 @@ actor DeepSeekClient {
             guard http.statusCode == 200 else {
                 let hint: String
                 switch http.statusCode {
-                case 401, 403: hint = "密钥无效或无权访问，请重新选择 .secret。"
-                case 402: hint = "DeepSeek 余额不足，请检查账户余额。"
+                case 401, 403: hint = "密钥无效或无权访问，请在设置中检查 API Key。"
+                case 402: hint = "模型服务账户余额不足，请检查账户余额。"
                 case 429: hint = "请求过于频繁，稍后会自动重试。"
-                case 500...599: hint = "DeepSeek 服务暂时不可用，稍后会自动重试。"
+                case 500...599: hint = "模型服务暂时不可用，稍后会自动重试。"
                 default: hint = "模型请求失败（HTTP \(http.statusCode)），请稍后重试。"
                 }
                 throw FishError.message(hint)

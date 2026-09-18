@@ -36,7 +36,7 @@ struct MainView: View {
                         Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    HStack(spacing: 5) { Circle().fill(model.hasKey ? Color.green : Color.orange).frame(width: 6, height: 6); Text("DeepSeek Flash").font(.system(size: 10, weight: .medium)) }
+                    HStack(spacing: 5) { Circle().fill(model.hasKey ? Color.green : Color.orange).frame(width: 6, height: 6); Text(model.preferences.api.model).font(.system(size: 10, weight: .medium)) }
                         .padding(.horizontal, 10).padding(.vertical, 7).background(.white, in: Capsule())
                 }.padding(26)
                 Divider().opacity(0.6)
@@ -181,17 +181,13 @@ struct MainView: View {
             VStack(alignment: .leading, spacing: 16) {
                 card("观察与陪伴") {
                     Toggle("自动观察屏幕", isOn: Binding(get: { model.preferences.automatic }, set: { model.setAutomatic($0) }))
-                    Text("开启后，屏幕截图会发送到 DeepSeek 进行识别。截图不保存到磁盘；锁屏和休眠时暂停。").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("开启后，屏幕截图会发送到所配置的 API 服务进行识别。截图不保存到磁盘；锁屏和休眠时暂停。").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack { Text("观察间隔"); Spacer(); Picker("观察间隔", selection: $model.preferences.interval) { Text("30 秒").tag(30.0); Text("1 分钟").tag(60.0); Text("2 分钟").tag(120.0); Text("5 分钟").tag(300.0) }.labelsHidden().frame(width: 120).onChange(of: model.preferences.interval) { _, _ in model.persist() } }
                     Toggle("观察所有显示器", isOn: $model.preferences.allDisplays).onChange(of: model.preferences.allDisplays) { _, _ in model.persist() }
                     HStack { Label(model.screenPermission ? "屏幕录制已授权" : "尚未授权屏幕录制", systemImage: model.screenPermission ? "checkmark.shield" : "lock.rectangle"); Spacer(); Button(model.screenPermission ? "系统设置" : "去授权") { model.requestPermission() } }
                     Text("授权后如仍无法截图，请退出并重新打开应用。").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
-                card("DeepSeek") {
-                    HStack { Text("识图与对话"); Spacer(); Text("deepseek-flash").font(.system(size: 12, design: .monospaced)).foregroundStyle(ocean) }
-                    HStack { Label(model.hasKey ? "密钥已读取" : "未配置密钥", systemImage: model.hasKey ? "checkmark.circle.fill" : "key").foregroundStyle(model.hasKey ? ocean : .orange); Spacer(); Button("选择 .secret…") { model.chooseCredentials() } }
-                    Text("密钥仅在本机读取，不写入聊天记录或应用包。").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+                card("模型连接") { ConnectionSettingsView(model: model) }
                 card("小肥鱼的性格") {
                     TextEditor(text: $model.preferences.personality).font(.system(size: 12)).frame(height: 80).scrollContentBackground(.hidden).padding(8).background(Color.black.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
                         .onChange(of: model.preferences.personality) { _, _ in model.persist() }
@@ -208,5 +204,57 @@ struct MainView: View {
     }
     private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) { Text(title).font(.system(size: 13, weight: .semibold)); content() }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+private struct ConnectionSettingsView: View {
+    @ObservedObject var model: FishModel
+    @State private var configuration = APIConfiguration()
+    @State private var apiKey = ""
+    @State private var removeKey = false
+    @State private var feedback = ""
+    @State private var failed = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LabeledContent("Base URL") {
+                TextField("https://api.deepseek.com", text: $configuration.baseURL).accessibilityLabel("Base URL")
+            }
+            LabeledContent("Model") {
+                TextField("deepseek-flash", text: $configuration.model).accessibilityLabel("Model")
+            }
+            LabeledContent("API Key") {
+                SecureField("输入密钥；留空保留此地址已存的密钥", text: $apiKey).accessibilityLabel("API Key")
+            }
+            Text(model.hasKey ? "当前连接已保存密钥。密钥按 Base URL 分别保存在本机钥匙串。" : "尚未配置密钥。填写后点击保存即可开始聊天。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            Toggle("清除此地址的已存密钥", isOn: $removeKey)
+                .onChange(of: removeKey) { _, value in if value { apiKey = "" } }
+            DisclosureGroup("高级选项") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("thinking · 思考模式", selection: $configuration.thinkingEnabled) {
+                        Text("disabled").tag(false)
+                        Text("enabled").tag(true)
+                    }
+                    Picker("reasoning_effort · 思考强度", selection: $configuration.reasoningEffort) {
+                        ForEach(APIConfiguration.Effort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    Text("none 关闭思考；low / high / max 开启思考并指定强度。服务和模型需支持这些选项及图片输入。")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }.padding(.top, 10)
+            }
+            HStack {
+                Button("保存连接配置") {
+                    do {
+                        try model.saveConnection(configuration, apiKey: apiKey, removeKey: removeKey)
+                        configuration = model.preferences.api
+                        apiKey = ""; removeKey = false; failed = false
+                        feedback = "已保存"
+                    } catch { failed = true; feedback = error.localizedDescription }
+                }.buttonStyle(.borderedProminent)
+                Text(feedback == "已保存" && (configuration != model.preferences.api || !apiKey.isEmpty || removeKey) ? "尚未保存更改" : feedback).foregroundStyle(failed ? Color.red : Color.secondary).font(.system(size: 11))
+            }
+        }.textFieldStyle(.roundedBorder)
+            .onAppear { configuration = model.preferences.api }
+            .onChange(of: apiKey) { _, value in if !value.isEmpty { removeKey = false } }
     }
 }

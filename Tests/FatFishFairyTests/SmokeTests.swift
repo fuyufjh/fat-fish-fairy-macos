@@ -9,10 +9,7 @@ import AppKit
         checkCount += 1
     }
     static func main() async throws {
-        try check(SecretParser.key(from: "# comment\nOTHER_KEY=no\nexport DEEPSEEK_API_KEY = 'test-value'\n") == "test-value", "dotenv export / quoting")
-        try check(SecretParser.key(from: "DEEPSEEK_API_KEY=\"a=b\"") == "a=b", "equals in key")
-        try check(SecretParser.key(from: "OTHER_DEEPSEEK_API_KEY=no") == nil, "exact key name")
-        try check(SecretParser.key(from: "DEEPSEEK_API_KEY=") == nil, "empty key")
+        try await ConfigurationTests.run()
         let silent = try ModelReply.parse("{\"speech\":\"\",\"activity\":\"sleeping\",\"memories\":[]}")
         try check(silent.speech.isEmpty && silent.activity == "sleeping", "silent response")
         let fenced = try ModelReply.parse("```json\n{\"speech\":\"你好\",\"activity\":\"happy\",\"memories\":[\"喜欢拿铁\"]}\n```")
@@ -63,7 +60,7 @@ import AppKit
         print("PASS: \(checkCount) offline checks (including multi-display format recovery)")
 
         if ProcessInfo.processInfo.environment["FATFISH_LIVE_TEST"] == "1" {
-            guard let key = Credentials.load(path: FileManager.default.currentDirectoryPath + "/.secret") else { throw FishError.message("Missing test credentials") }
+            guard let key = ProcessInfo.processInfo.environment["FATFISH_TEST_API_KEY"] else { throw FishError.message("Missing test credentials") }
             let client = DeepSeekClient()
             let text = try await client.respond(key: key, personality: "你是一只友善的小鱼。", memories: [], history: [], text: "这是一条集成测试消息，请用中文打个招呼，不要创建记忆。", images: [], observation: false, activities: ["idle", "happy"])
             try check(!text.speech.isEmpty, "live conversation")

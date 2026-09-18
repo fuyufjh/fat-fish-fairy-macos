@@ -24,6 +24,7 @@ import UniformTypeIdentifiers
     let store = StateStore()
     private let client = DeepSeekClient(diagnosticsURL: StateStore().directory.appendingPathComponent("last-request.json"))
     private var key: String?
+    private let credentialStore = APIKeyStore()
     private var requestTask: Task<Void, Never>?
     private var timer: Timer?
     private var bubbleTask: Task<Void, Never>?
@@ -51,8 +52,8 @@ import UniformTypeIdentifiers
     }
 
     func reloadCredentials() {
-        key = Credentials.load(path: preferences.credentialPath)
-        hasKey = key != nil
+        do { key = try credentialStore.load(account: preferences.api.baseURL); hasKey = key != nil }
+        catch { key = nil; hasKey = false; self.error = error.localizedDescription }
     }
 
     func persist() {
@@ -65,7 +66,7 @@ import UniformTypeIdentifiers
         screenPermission = ScreenCapture.hasPermission
         guard preferences.automatic, !busy, sessionActive, Date() >= nextObservation else { return }
         guard screenPermission else { status = "等待屏幕录制权限"; return }
-        guard hasKey else { status = "等待配置 DeepSeek 密钥"; return }
+        guard hasKey else { status = "等待配置 API Key"; return }
         observe()
     }
 
@@ -103,14 +104,14 @@ import UniformTypeIdentifiers
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, !text.isEmpty || attachment != nil else { return }
-        guard hasKey else { error = "未找到 DEEPSEEK_API_KEY，请在设置里选择 .secret 文件。"; return }
+        guard hasKey else { error = "请在设置中填写并保存 API Key。"; return }
         let image = attachment
         run(text: text.isEmpty ? "看看这张图，告诉我你发现了什么。" : text, observation: false, attachment: image)
         draft = ""; attachment = nil; attachmentName = nil
     }
 
     private func run(text: String, observation: Bool, attachment: Data?) {
-        guard let key else { error = "请先配置 DeepSeek 密钥。"; return }
+        guard let key else { error = "请先在设置中配置 API Key。"; return }
         error = nil; busy = true; activity = "thinking"
         status = observation ? "V · 正在看屏幕…" : "F · 小肥鱼想一想…"
         let requestID = UUID(); generation = requestID
@@ -120,6 +121,7 @@ import UniformTypeIdentifiers
         let memoryTexts = memories.map(\.text)
         let actions = activities
         let allDisplays = preferences.allDisplays
+        let configuration = preferences.api
         requestTask = Task {
             do {
                 let images: [Data]
@@ -128,7 +130,7 @@ import UniformTypeIdentifiers
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 status = "F · 小肥鱼想一想…"
-                let reply = try await client.respond(key: key, personality: personality, memories: memoryTexts,
+                let reply = try await client.respond(key: key, configuration: configuration, personality: personality, memories: memoryTexts,
                                                      history: history, text: text, images: images, observation: observation, activities: actions)
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
@@ -176,15 +178,21 @@ import UniformTypeIdentifiers
         persist()
     }
 
-    func chooseCredentials() {
-        let panel = NSOpenPanel(); panel.title = "选择包含 DEEPSEEK_API_KEY 的 .secret 文件"
-        panel.showsHiddenFiles = true; panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url {
-            guard let text = try? String(contentsOf: url, encoding: .utf8), SecretParser.key(from: text) != nil else {
-                error = "文件中未找到有效的 DEEPSEEK_API_KEY=…"; return
-            }
-            preferences.credentialPath = url.path; reloadCredentials(); persist()
-        }
+    func saveConnection(_ configuration: APIConfiguration, apiKey: String, removeKey: Bool) throws {
+        guard !loadFailed else { throw FishError.message("请先修复本地记录，再保存配置。") }
+        let clean = try configuration.validated()
+        let entered = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Blank input retains only the key belonging to this exact API base URL.
+        let savedKey = removeKey ? nil : (entered.isEmpty ? try credentialStore.load(account: clean.baseURL) : entered)
+        var updated = preferences
+        updated.connection = clean
+        let oldKey = try credentialStore.load(account: clean.baseURL)
+        try credentialStore.save(savedKey, account: clean.baseURL)
+        do { try store.save(SavedState(preferences: updated, messages: Array(messages.suffix(200)), memories: memories)) }
+        catch { try? credentialStore.save(oldKey, account: clean.baseURL); throw error }
+        cancel()
+        preferences = updated; key = savedKey; hasKey = savedKey != nil
+        failures = 0; error = nil; status = hasKey ? "连接配置已保存" : "等待配置 API Key"
     }
 
     func attachImage() {
