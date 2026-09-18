@@ -48,6 +48,17 @@ import AppKit
         try Data("{\"coffee\":3}".utf8).write(to: good.appendingPathComponent("index.json"))
         let themes = FishTheme.imported(from: root)
         try check(themes.count == 1 && themes.first?.animations["coffee"] == 3, "invalid themes rejected")
+        let bundledRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Sources/FatFishFairy/Resources/Themes")
+        guard let maid = FishTheme.imported(from: bundledRoot).first(where: { $0.id == FishTheme.defaultThemeID }) else { throw FishError.message("Default bundled theme missing") }
+        try check(Preferences().theme == "loli_maid" && maid.name == "萝莉小妹抖", "maid is default with correct display name")
+        try check(maid.animations.count == 10 && maid.animations.values.reduce(0, +) == 34, "complete bundled animation index")
+        try check(!(maid.character ?? "").isEmpty, "bundled character personality present")
+        for (name, count) in maid.animations {
+            for frame in 1...count {
+                let file = maid.directory!.appendingPathComponent("\(name)_\(frame).png")
+                try check(NSImage(contentsOf: file) != nil, "bundled frame decodes: \(name)_\(frame)")
+            }
+        }
         try await ResponseRegressionTests.run()
         print("PASS: \(checkCount) offline checks (including multi-display format recovery)")
 

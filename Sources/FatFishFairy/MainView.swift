@@ -170,7 +170,7 @@ struct MainView: View {
                     HStack { Text("小巧"); Slider(value: $model.preferences.petSize, in: 120...245, step: 5) { _ in model.persist() }; Text("圆滚滚") }.font(.system(size: 12))
                 }
                 card("带上你喜欢的角色") {
-                    Text("兼容原版的 index.json、Character.md 和逐帧 PNG 主题。原仓库图片仅供测试，请遵守素材授权。").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("已内置萝莉小妹抖。也可以导入原版格式的 index.json、Character.md 和逐帧 PNG 主题。").font(.system(size: 12)).foregroundStyle(.secondary)
                     Button("导入主题文件夹…") { model.importTheme() }
                 }
             }.padding(26)
@@ -195,7 +195,7 @@ struct MainView: View {
                 card("小肥鱼的性格") {
                     TextEditor(text: $model.preferences.personality).font(.system(size: 12)).frame(height: 80).scrollContentBackground(.hidden).padding(8).background(Color.black.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
                         .onChange(of: model.preferences.personality) { _, _ in model.persist() }
-                    Text("用于内置小肥鱼；导入主题优先使用自己的 Character.md。").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("用于三种配色小鱼；萝莉小妹抖和导入主题优先使用自己的 Character.md。").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 HStack {
                     Button("打开本地数据") { NSWorkspace.shared.open(model.store.directory) }

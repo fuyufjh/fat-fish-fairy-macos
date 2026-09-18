@@ -2,6 +2,14 @@
 
 环境：macOS 26.6.2 / Apple Silicon，Swift 6.3.3（Command Line Tools）。2026-09-18。
 
+## 默认内置萝莉小妹抖
+
+- 仓库收录 `index.json`、`Character.md` 和 34 张动画帧；10 组动作齐全，未收录不用的 reference.png。
+- SwiftPM 资源目录和独立 `.app` 资源目录均支持加载；新配置默认主题 ID 为 `loli_maid`。
+- 97 项离线检查通过，包含默认主题、动作数量、性格文本及每张 PNG 解码验证。
+- 重新构建 DMG，只读挂载后逐文件比较全部 36 个主题文件与源码一致，应用签名验证通过。
+- Computer 中确认外观页第一项内置角色已选中，角色图片正常显示。当前用户主题已切换到内置版本，对话、记忆及其他设置保留。
+
 ## DMG 构建
 
 - 根目录 `./build.sh` 成功生成 `dist/FatFishFairy.app` 和 `dist/FatFishFairy-1.0.0-arm64.dmg`。

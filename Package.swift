@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "FatFishFairy", targets: ["FatFishFairy"])],
     targets: [
-        .executableTarget(name: "FatFishFairy")
+        .executableTarget(name: "FatFishFairy", resources: [.copy("Resources/Themes")])
     ],
     swiftLanguageModes: [.v5]
 )

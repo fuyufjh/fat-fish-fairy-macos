@@ -16,7 +16,7 @@ struct FishMemory: Codable, Identifiable {
 }
 
 struct Preferences: Codable {
-    var theme = "ocean"
+    var theme = FishTheme.defaultThemeID
     var interval = 60.0
     var petSize = 180.0
     var automatic = false
@@ -131,7 +131,18 @@ struct FishTheme: Identifiable {
     var animations: [String: Int] = [:]
     var character: String? = nil
 
-    static let builtins: [FishTheme] = [
+    static let defaultThemeID = "loli_maid"
+    static var bundledThemesRoot: URL? {
+        // App bundles contain Themes directly. `swift run` uses the SwiftPM resource bundle.
+        if let root = Bundle.main.resourceURL?.appendingPathComponent("Themes"),
+           FileManager.default.fileExists(atPath: root.path) { return root }
+        #if SWIFT_PACKAGE
+        return Bundle.module.resourceURL?.appendingPathComponent("Themes")
+        #else
+        return nil
+        #endif
+    }
+    static let builtins: [FishTheme] = (bundledThemesRoot.map { imported(from: $0) } ?? []) + [
         .init(id: "ocean", name: "蓝色小肥鱼", color: .systemCyan),
         .init(id: "peach", name: "蜜桃小肥鱼", color: .systemPink),
         .init(id: "mint", name: "薄荷小肥鱼", color: .systemTeal)
@@ -144,7 +155,7 @@ struct FishTheme: Identifiable {
             let valid = animations.filter { !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }
             guard !valid.isEmpty else { return nil }
             let slug = folder.lastPathComponent
-            let name = slug.hasPrefix("loli_maid-") ? "萝莉小妹抖" : slug.hasPrefix("nurgling-") ? "纳垢灵" : slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
+            let name = (slug == "loli_maid" || slug.hasPrefix("loli_maid-")) ? "萝莉小妹抖" : slug.hasPrefix("nurgling-") ? "纳垢灵" : slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
             return FishTheme(id: slug, name: name, color: .systemCyan, directory: folder, animations: valid,
                              character: try? String(contentsOf: folder.appendingPathComponent("Character.md"), encoding: .utf8))
         }.sorted { $0.name < $1.name }

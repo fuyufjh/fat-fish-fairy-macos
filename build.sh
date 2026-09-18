@@ -54,6 +54,7 @@ BIN_DIR="$(swift build -c release --show-bin-path)"
 APP="$WORK/FatFishFairy.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/FatFishFairy" "$APP/Contents/MacOS/FatFishFairy"
+ditto "$ROOT/Sources/FatFishFairy/Resources/Themes" "$APP/Contents/Resources/Themes"
 swift "$ROOT/scripts/make-icon.swift" "$WORK/FatFish.iconset"
 iconutil -c icns "$WORK/FatFish.iconset" -o "$APP/Contents/Resources/FatFish.icns"
 APP_PATH="$APP" PROJECT_PATH="$ROOT" VERSION_VALUE="$APP_VERSION" python3 - <<'PY'
@@ -90,6 +91,7 @@ if [ "$MAKE_DMG" = 1 ]; then
 4. 按提示授予小肥鱼屏幕录制权限，再开启自动观察。
 
 需要 macOS 14 或更新版本。识图和对话使用 deepseek-flash。
+已内置默认形象「萝莉小妹抖」，无需另行下载或导入。
 安装包不包含 API 密钥、聊天记录、记忆或导入的主题。
 默认构建仅本机签名，未经过 Apple 公证。
 TEXT

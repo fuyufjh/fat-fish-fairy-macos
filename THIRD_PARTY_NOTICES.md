@@ -2,7 +2,9 @@
 
 This native macOS implementation is inspired by [vczh/FatFishFairy](https://github.com/vczh/FatFishFairy).
 
-The upstream software is licensed under the MIT License. Upstream theme images are excluded from that license and are designated for testing only; they are not bundled with this app. The built-in fish is drawn in SwiftUI/AppKit.
+The upstream software is licensed under the MIT License. The default “萝莉小妹抖” theme bundles the animation PNGs, index.json, and Character.md from upstream `themes/loli_maid`; reference.png is not included. The alternate fish designs are drawn in SwiftUI/AppKit.
+
+Upstream excludes theme images from its MIT license and describes them as testing-only. This project's owner requested bundling this character for noncommercial use and stated that the character is in the public domain. This records the owner's representation; it does not change the upstream notice or independently establish the images' copyright status.
 
 ## Upstream MIT License
 
