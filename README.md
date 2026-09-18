@@ -6,14 +6,23 @@
 
 构建好的应用在 `dist/FatFishFairy.app`，可以直接双击。关闭聊天窗口后，桌面小鱼与菜单栏仍继续运行；通过菜单栏或 `⌘Q` 完全退出。
 
-重新构建（只需 Apple Command Line Tools）：
+一键编译并生成 DMG（只需 Apple Command Line Tools；未安装时先执行 `xcode-select --install`）：
 
 ```sh
-./scripts/build.sh
-open dist/FatFishFairy.app
+./build.sh
 ```
 
-应用使用本机 ad-hoc 签名，尚未 Apple 公证。跨机器分发需使用自己的 Developer ID 签名与公证；当前构建针对本机架构。
+输出为 `dist/FatFishFairy.app` 和 `dist/FatFishFairy-1.0.0-arm64.dmg`（Intel Mac 上后缀为 `x86_64`）。打开 DMG，将应用拖到 Applications，然后推出磁盘映像，从「应用程序」启动。安装包不包含 `.secret`、本地对话、记忆或导入的主题。
+
+```sh
+./build.sh --app-only                 # 只生成 .app，兼容旧入口 ./scripts/build.sh
+APP_VERSION=1.0.1 ./build.sh           # 自定义版本号
+./build.sh --help
+```
+
+脚本可从任何工作目录调用，先在临时目录构建并验证签名、DMG 完整性，全部成功后替换输出；失败时保留旧产物。`dist/` 已被 Git 忽略。
+
+默认使用本机 ad-hoc 签名，尚未 Apple 公证；当前构建针对本机架构。若有 Developer ID，可设置 `CODE_SIGN_IDENTITY='Developer ID Application: 你的名称 (TEAMID)'` 指定签名身份，公证仍需自行完成。
 
 ## 配置 DeepSeek
 

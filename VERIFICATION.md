@@ -2,6 +2,14 @@
 
 环境：macOS 26.6.2 / Apple Silicon，Swift 6.3.3（Command Line Tools）。2026-09-18。
 
+## DMG 构建
+
+- 根目录 `./build.sh` 成功生成 `dist/FatFishFairy.app` 和 `dist/FatFishFairy-1.0.0-arm64.dmg`。
+- `hdiutil verify` 校验通过；只读挂载后确认应用、指向 `/Applications` 的快捷方式、安装说明及第三方声明齐全。
+- 挂载镜像内的应用通过 `codesign --verify --deep --strict`；未包含 API 密钥、`.secret` 或本地状态文件。
+- `bash -n` 通过，未知参数返回退出码 2。构建产物在被忽略的 `dist/` 中，不进入 Git。
+- 默认 ad-hoc 签名；未进行 Apple 公证或跨架构安装验证。
+
 ## 多显示器回复格式修复
 
 - 新建配置默认 `allDisplays = true`；已有用户选择保留，当前用户配置已开启。
