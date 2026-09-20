@@ -34,11 +34,7 @@ struct PetView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
             if !model.bubble.isEmpty {
-                Text(model.bubble).font(.system(size: 13, weight: .medium)).foregroundStyle(Color(red: 0.12, green: 0.21, blue: 0.26))
-                    .lineLimit(5).padding(14).frame(maxWidth: 280, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.8)))
-                    .shadow(color: .black.opacity(0.1), radius: 10, y: 3)
+                PetSpeechBubble(text: model.bubble)
                     .onTapGesture { AppDelegate.shared?.showWindow() }
                     .help("点击打开完整对话")
             }
@@ -46,7 +42,7 @@ struct PetView: View {
                 .frame(width: model.preferences.petSize, height: model.preferences.petSize * 0.86)
                 .overlay(PetDragArea())
             Text(model.busy ? model.status : (model.preferences.automatic ? "● 陪伴中" : "Ⅱ 观察已暂停"))
-                .font(.system(size: 10, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 4)
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(.primary).padding(.horizontal, 9).padding(.vertical, 4)
                 .background(.regularMaterial, in: Capsule()).padding(.bottom, 10)
         }.padding(.horizontal, 14).frame(width: 330, height: 365)
     }
