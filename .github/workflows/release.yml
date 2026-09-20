@@ -1,0 +1,70 @@
+name: macOS DMG release
+
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package DMG (macOS arm64)
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version and main ancestry
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$VERSION_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Version tags must have the form v1.2.3.' >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo 'Release tag must point to a commit on main.' >&2
+            exit 1
+          fi
+          echo "APP_VERSION=${VERSION_TAG#v}" >> "$GITHUB_ENV"
+      - name: Run offline tests
+        run: ./scripts/test.sh
+      - name: Build, sign and verify DMG
+        run: ./build.sh
+      - name: Preserve DMG artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: FatFishFairy-${{ github.ref_name }}-arm64
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download DMG and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          gh run download "$RUN_ID" --name "FatFishFairy-$VERSION_TAG-arm64" --dir dist
+          if ! gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            gh release create "$VERSION_TAG" --verify-tag --title "FatFishFairy $VERSION_TAG" --generate-notes --draft
+          fi
+          gh release upload "$VERSION_TAG" dist/*.dmg --clobber
+          gh release edit "$VERSION_TAG" --draft=false

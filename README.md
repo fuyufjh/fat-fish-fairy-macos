@@ -85,6 +85,22 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 
 ## 验证
 
+### GitHub Actions
+
+- 提交到 `main` 的 PR，以及 `main` 上的 push，自动在 macOS 26 / Apple Silicon runner 编译 Release App、验证签名并运行离线测试，无需 API Key。
+- 推送 `v1.2.3` 格式的版本 tag，自动测试、编译打包 arm64 DMG，并发布到对应的 GitHub Release；Actions 中也保留 30 天的 DMG artifact。
+- tag 必须指向 `main` 历史中的提交，否则发布检查失败。版本号由 tag 去掉 `v` 后写入 App 和 DMG 文件名；暂不支持预发布后缀。
+- CI 安装包使用 ad-hoc 签名，未经过 Apple 公证，与本地默认构建一致。
+
+发布示例（先确认目标提交已推送到 GitHub `main`）：
+
+```sh
+git tag v1.0.1
+git push github v1.0.1
+```
+
+### 本地检查
+
 ```sh
 ./scripts/test.sh
 # 可选：真实 API 测试，仅发送测试文字和纯色合成图，不截屏
