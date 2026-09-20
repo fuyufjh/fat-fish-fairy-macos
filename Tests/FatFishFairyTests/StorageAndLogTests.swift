@@ -57,8 +57,16 @@ struct StorageAndLogTests {
         let log = try String(contentsOf: logURL, encoding: .utf8)
         let events = try log.split(separator: "\n").map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
         try SmokeTests.check(events.count == 4 && events.compactMap { $0["event"] as? String } == ["request", "response", "request", "response"], "every retry logs request and response")
-        try SmokeTests.check(!log.contains(secret) && log.contains("[REDACTED]") && log.contains("base64,AQID"), "request bodies include images but redact API key")
+        try SmokeTests.check(!log.contains(secret) && log.contains("[REDACTED]") && !log.contains("base64,AQID") && log.contains("image/jpeg omitted"), "logs omit image payloads and redact API key")
         try SmokeTests.check(events[0]["request_id"] as? String == events[3]["request_id"] as? String && events[2]["attempt"] as? Int == 2, "log correlation and attempt numbers")
+        let sentMessages = StubProtocol.bodies[0]["messages"] as! [[String: Any]]
+        let sentContent = sentMessages.last!["content"] as! [[String: Any]]
+        try SmokeTests.check((sentContent.last!["image_url"] as? [String: String])?["url"] == "data:image/jpeg;base64,AQID", "logging does not change transmitted image")
+        let largePayload = Data(repeating: 255, count: 8192).base64EncodedString()
+        let compactURL = root.appendingPathComponent("compact.log")
+        try AppLog(url: compactURL).write(["body": ["images": ["data:image/png;base64," + largePayload, "data:image/webp;base64," + largePayload], "text": "hello", "response": "image: data:image/jpeg;base64," + largePayload]], secret: "")
+        let compact = try String(contentsOf: compactURL, encoding: .utf8)
+        try SmokeTests.check(compact.utf8.count < 500 && !compact.contains(largePayload) && compact.contains("hello") && compact.contains("image/webp omitted"), "nested and response image payloads remain compact while text is preserved")
         let body = events[0]["body"] as! [String: Any]
         let messages = body["messages"] as! [[String: Any]]
         try SmokeTests.check(!(messages[0]["content"] as! String).contains("character-only-marker") && (messages[1]["content"] as! String).contains("character-only-marker"), "system rules and persona are separate messages")

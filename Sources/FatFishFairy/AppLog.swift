@@ -5,18 +5,29 @@ final class AppLog {
     let url: URL
     let maxBytes: Int
     private static let lock = NSLock()
+    private static let imageDataURL = try! NSRegularExpression(pattern: #"data:(image/[A-Za-z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)"#, options: .caseInsensitive)
     init(url: URL, maxBytes: Int = 50 * 1024 * 1024) { self.url = url; self.maxBytes = maxBytes }
     func write(_ event: [String: Any], secret: String) throws {
         Self.lock.lock(); defer { Self.lock.unlock() }
         func redact(_ value: Any) -> Any {
-            if let text = value as? String { return secret.isEmpty ? text : text.replacingOccurrences(of: secret, with: "[REDACTED]") }
+            if let text = value as? String {
+                // Sanitize only the log copy, including image URLs embedded in response text.
+                let source = text as NSString
+                let result = NSMutableString(string: text)
+                for match in Self.imageDataURL.matches(in: text, range: NSRange(location: 0, length: source.length)).reversed() {
+                    let mime = source.substring(with: match.range(at: 1))
+                    result.replaceCharacters(in: match.range, with: "[\(mime) omitted: \(match.range(at: 2).length) encoded characters]")
+                }
+                let sanitized = result as String
+                return secret.isEmpty ? sanitized : sanitized.replacingOccurrences(of: secret, with: "[REDACTED]")
+            }
             if let array = value as? [Any] { return array.map(redact) }
             if let object = value as? [String: Any] { return object.mapValues(redact) }
             return value
         }
         var entry = event
         entry["timestamp"] = ISO8601DateFormatter().string(from: Date())
-        var data = try JSONSerialization.data(withJSONObject: redact(entry), options: [.sortedKeys, .fragmentsAllowed])
+        var data = try JSONSerialization.data(withJSONObject: redact(entry), options: [.sortedKeys, .fragmentsAllowed, .withoutEscapingSlashes])
         data.append(10)
         let fm = FileManager.default
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
