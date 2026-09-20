@@ -6,7 +6,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "FatFishFairy", targets: ["FatFishFairy"])],
     targets: [
-        .executableTarget(name: "FatFishFairy", resources: [.copy("Resources/Themes")])
+        .systemLibrary(name: "CSQLite"),
+        .executableTarget(name: "FatFishFairy", dependencies: ["CSQLite"], resources: [.copy("Resources/Themes"), .copy("Resources/SystemPrompt.md")])
     ],
     swiftLanguageModes: [.v5]
 )

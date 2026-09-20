@@ -55,6 +55,7 @@ APP="$WORK/FatFishFairy.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/FatFishFairy" "$APP/Contents/MacOS/FatFishFairy"
 ditto "$ROOT/Sources/FatFishFairy/Resources/Themes" "$APP/Contents/Resources/Themes"
+cp "$ROOT/Sources/FatFishFairy/Resources/SystemPrompt.md" "$APP/Contents/Resources/SystemPrompt.md"
 swift "$ROOT/scripts/make-icon.swift" "$WORK/FatFish.iconset" "$ROOT/Assets/AppIcon.png"
 iconutil -c icns "$WORK/FatFish.iconset" -o "$APP/Contents/Resources/FatFish.icns"
 APP_PATH="$APP" VERSION_VALUE="$APP_VERSION" python3 - <<'PY'

@@ -1,6 +1,7 @@
 import Foundation
 
 final class StubProtocol: URLProtocol {
+    static var transportError: Error?
     static var responses: [(Int, Data)] = []
     static var bodies: [[String: Any]] = []
     static var urls: [String] = []
@@ -24,7 +25,9 @@ final class StubProtocol: URLProtocol {
         Self.authorizations.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
         Self.bodies.append((try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:])
         let response = Self.responses.isEmpty ? (500, Data()) : Self.responses.removeFirst()
+        let transportError = Self.transportError; Self.transportError = nil
         Self.lock.unlock()
+        if let transportError { client?.urlProtocol(self, didFailWithError: transportError); return }
         let http = HTTPURLResponse(url: request.url!, statusCode: response.0, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: response.1)
@@ -33,7 +36,7 @@ final class StubProtocol: URLProtocol {
     override func stopLoading() {}
     static func reset(_ responses: [(Int, Data)]) {
         lock.lock(); defer { lock.unlock() }
-        Self.responses = responses; bodies = []; urls = []; authorizations = []
+        Self.responses = responses; transportError = nil; bodies = []; urls = []; authorizations = []
     }
 }
 

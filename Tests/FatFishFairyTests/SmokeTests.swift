@@ -10,6 +10,7 @@ import AppKit
     }
     static func main() async throws {
         try await ConfigurationTests.run()
+        try await StorageAndLogTests.run()
         let silent = try ModelReply.parse("{\"speech\":\"\",\"activity\":\"sleeping\",\"memories\":[]}")
         try check(silent.speech.isEmpty && silent.activity == "sleeping", "silent response")
         let fenced = try ModelReply.parse("```json\n{\"speech\":\"你好\",\"activity\":\"happy\",\"memories\":[\"喜欢拿铁\"]}\n```")
@@ -31,12 +32,13 @@ import AppKit
         try check(restored.preferences.theme == "mint" && restored.preferences.petX == 123, "theme / position restored")
         try check(restored.memories.first?.text == "喜欢拿铁", "memory restored")
         try check(restored.messages.first?.id == state.messages.first?.id, "conversation restored")
-        let raw = try String(contentsOf: store.file, encoding: .utf8)
-        try check(!raw.contains("DEEPSEEK_API_KEY") && !raw.contains("base64"), "no secrets / screenshots in state")
         let mode = try FileManager.default.attributesOfItem(atPath: store.file.path)[.posixPermissions] as? NSNumber
         try check(mode?.intValue == 0o600, "private state permissions")
-        try Data("broken".utf8).write(to: store.file)
-        try check((try? store.load()) == nil, "corrupt state never silently reset")
+        let corrupt = root.appendingPathComponent("corrupt")
+        try FileManager.default.createDirectory(at: corrupt, withIntermediateDirectories: true)
+        let corruptStore = StateStore(directory: corrupt)
+        try Data("broken".utf8).write(to: corruptStore.file)
+        try check((try? corruptStore.load()) == nil, "corrupt database never silently reset")
 
         let bad = root.appendingPathComponent("bad"), good = root.appendingPathComponent("good")
         try FileManager.default.createDirectory(at: bad, withIntermediateDirectories: true)

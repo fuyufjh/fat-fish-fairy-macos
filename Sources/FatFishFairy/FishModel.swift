@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
     @Published var preferences: Preferences
     @Published var messages: [ChatMessage]
     @Published var memories: [FishMemory]
+    @Published var themes = FishTheme.builtins
+    @Published var hasOlderMessages = false
+    @Published var historyRevision = UUID()
     @Published var status = "准备好陪你摸鱼了"
     @Published var bubble = "本肥鱼已就位。\n双击我，聊两句？"
     @Published var activity = "idle"
@@ -21,7 +24,7 @@ import UniformTypeIdentifiers
     @Published var petVisible = true
     @Published var sessionActive = true
     let store = StateStore()
-    private let client = DeepSeekClient(diagnosticsURL: StateStore().directory.appendingPathComponent("last-request.json"))
+    private let client = DeepSeekClient(diagnosticsURL: StateStore().directory.appendingPathComponent("last-request.json"), logURL: StateStore().directory.appendingPathComponent("app.log"))
     private var requestTask: Task<Void, Never>?
     private var timer: Timer?
     private var bubbleTask: Task<Void, Never>?
@@ -29,17 +32,22 @@ import UniformTypeIdentifiers
     private var generation = UUID()
     private var loadFailed = false
 
-    var theme: FishTheme { FishTheme.builtins[0] }
+    var theme: FishTheme { themes.first { $0.id == preferences.theme } ?? themes[0] }
+    var themeRoot: URL { store.directory.appendingPathComponent("Themes", isDirectory: true) }
     var activities: [String] { theme.directory == nil ? ["idle", "happy", "thinking", "sleeping", "programming", "coffee"] : theme.animations.keys.sorted() }
 
     init() {
         var state = SavedState()
         var loadError: String?
         do { state = try store.load() }
-        catch { loadError = "本地记录读取失败，已保留原文件。请先备份 state.json 后修复或移走该文件，再重新启动。" }
+        catch { loadError = "本地记录读取失败，已保留原文件。请先备份 state.sqlite 和旧版 state.json 后修复数据，再重新启动。" }
         preferences = state.preferences; messages = state.messages; memories = state.memories
         if let loadError { self.error = loadError; loadFailed = true }
-        preferences.theme = FishTheme.defaultThemeID
+        themes += FishTheme.imported(from: themeRoot)
+        if !themes.contains(where: { $0.id == preferences.theme }) { preferences.theme = FishTheme.defaultThemeID }
+        hasOlderMessages = (try? store.hasMessages(before: messages.first?.id)) ?? false
+        do { try AppLog(url: store.directory.appendingPathComponent("app.log")).write(["event": "application_start", "loaded_messages": messages.count], secret: preferences.api.apiKey) }
+        catch { if self.error == nil { self.error = "日志初始化失败：\(error.localizedDescription)" } }
         nextObservation = Date().addingTimeInterval(8)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -48,8 +56,38 @@ import UniformTypeIdentifiers
 
     func persist() {
         guard !loadFailed else { return }
-        do { try store.save(SavedState(preferences: preferences, messages: Array(messages.suffix(200)), memories: memories)) }
+        do {
+            try store.save(SavedState(preferences: preferences, messages: messages, memories: memories))
+            if !(AppDelegate.shared?.mainWindow?.isVisible ?? false) { messages = Array(messages.suffix(50)) }
+            hasOlderMessages = try store.hasMessages(before: messages.first?.id)
+        }
         catch { self.error = "本地保存失败：\(error.localizedDescription)" }
+    }
+
+    func reloadLatestMessages() {
+        guard !loadFailed else { return }
+        do {
+            // Persist unsaved messages before replacing the visible window.
+            try store.save(SavedState(preferences: preferences, messages: messages, memories: memories))
+            messages = try store.messagePage()
+            hasOlderMessages = try store.hasMessages(before: messages.first?.id)
+            historyRevision = UUID()
+        } catch { self.error = "聊天记录加载失败：\(error.localizedDescription)" }
+    }
+
+    func loadOlderMessages() {
+        guard !loadFailed, hasOlderMessages, let first = messages.first?.id else { return }
+        do {
+            messages.insert(contentsOf: try store.messagePage(before: first), at: 0)
+            hasOlderMessages = try store.hasMessages(before: messages.first?.id)
+        } catch { self.error = "聊天记录加载失败：\(error.localizedDescription)" }
+    }
+
+    func chooseTheme(_ id: String) {
+        guard preferences.theme != id, themes.contains(where: { $0.id == id }) else { return }
+        cancel(); preferences.theme = id; activity = "idle"
+        showBubble("换个样子，继续陪你。")
+        persist()
     }
 
     func tick() {
@@ -109,6 +147,7 @@ import UniformTypeIdentifiers
         let history = messages
         if !observation { messages.append(ChatMessage(role: "user", text: text + (attachment != nil ? "\n[附带图片]" : ""))); persist() }
         let personality = theme.character ?? preferences.personality
+        let systemPrompt = preferences.systemPrompt
         let memoryTexts = memories.map(\.text)
         let actions = activities
         let allDisplays = preferences.allDisplays
@@ -121,7 +160,7 @@ import UniformTypeIdentifiers
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 status = "F · 小肥鱼想一想…"
-                let reply = try await client.respond(key: key, configuration: configuration, personality: personality, memories: memoryTexts,
+                let reply = try await client.respond(key: key, configuration: configuration, personality: personality, systemPrompt: systemPrompt, memories: memoryTexts,
                                                      history: history, text: text, images: images, observation: observation, activities: actions)
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
@@ -141,7 +180,7 @@ import UniformTypeIdentifiers
                     }
                     memories = Array(memories.suffix(60))
                 }
-                messages = Array(messages.suffix(200)); persist()
+                persist()
                 nextObservation = Date().addingTimeInterval(preferences.interval)
             } catch {
                 guard generation == requestID, !Task.isCancelled else { return }
@@ -162,11 +201,20 @@ import UniformTypeIdentifiers
         }
     }
 
+    func saveSystemPrompt(_ text: String) throws {
+        guard !loadFailed else { throw FishError.message("请先修复本地记录，再保存提示词。") }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FishError.message("系统提示词不能为空。") }
+        var updated = preferences
+        updated.systemPrompt = text == (try PromptBuilder.defaultSystemPrompt()) ? nil : text
+        try store.save(SavedState(preferences: updated, messages: messages, memories: memories))
+        preferences = updated
+    }
+
     func saveConnection(_ configuration: APIConfiguration) throws {
         guard !loadFailed else { throw FishError.message("请先修复本地记录，再保存配置。") }
         var updated = preferences
         updated.connection = try configuration.validated()
-        try store.save(SavedState(preferences: updated, messages: Array(messages.suffix(200)), memories: memories))
+        try store.save(SavedState(preferences: updated, messages: messages, memories: memories))
         cancel()
         preferences = updated
         failures = 0; error = nil; status = hasKey ? "连接配置已保存" : "等待配置 API Key"
@@ -189,4 +237,32 @@ import UniformTypeIdentifiers
         }
     }
 
+    func importTheme() {
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.title = "选择包含 index.json 和动画 PNG 的主题文件夹"
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: source.appendingPathComponent("index.json"))
+            let index = try JSONDecoder().decode([String: Int].self, from: data)
+            guard !index.isEmpty, index.allSatisfy({ !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }) else { throw FishError.message("主题索引无效。") }
+            let name = source.lastPathComponent + "-" + UUID().uuidString.prefix(6)
+            let destination = themeRoot.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            do {
+                try data.write(to: destination.appendingPathComponent("index.json"))
+                for (animation, count) in index {
+                    for frame in 1...count {
+                        let file = "\(animation)_\(frame).png"
+                        guard NSImage(contentsOf: source.appendingPathComponent(file)) != nil else { throw FishError.message("主题缺少有效图片：\(file)") }
+                        try FileManager.default.copyItem(at: source.appendingPathComponent(file), to: destination.appendingPathComponent(file))
+                    }
+                }
+                if FileManager.default.fileExists(atPath: source.appendingPathComponent("Character.md").path) {
+                    try FileManager.default.copyItem(at: source.appendingPathComponent("Character.md"), to: destination.appendingPathComponent("Character.md"))
+                }
+            } catch { try? FileManager.default.removeItem(at: destination); throw error }
+            themes = FishTheme.builtins + FishTheme.imported(from: themeRoot)
+            chooseTheme(name)
+        } catch { self.error = "主题导入失败：\(error.localizedDescription)" }
+    }
 }

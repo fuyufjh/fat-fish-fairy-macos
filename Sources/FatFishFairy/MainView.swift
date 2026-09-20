@@ -60,8 +60,8 @@ struct MainView: View {
         }.foregroundStyle(ink).tint(ocean).frame(minWidth: 830, minHeight: 630)
             .preferredColorScheme(.light)
     }
-    private var title: String { ["chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "蓝色小肥鱼", "settings": "舒服地待在你身边。"][selection]! }
-    private var subtitle: String { ["chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "调整小肥鱼在桌面上的大小。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
+    private var title: String { ["chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "桌面形象", "settings": "舒服地待在你身边。"][selection]! }
+    private var subtitle: String { ["chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "选择你的桌面伙伴，调整合适的大小。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
     private func nav(_ id: String, _ label: String, _ icon: String) -> some View {
         Button { selection = id } label: {
             HStack(spacing: 11) { Image(systemName: icon).frame(width: 18); Text(label); Spacer() }
@@ -74,7 +74,14 @@ struct MainView: View {
         VStack(spacing: 0) {
             ScrollViewReader { reader in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        if model.hasOlderMessages {
+                            Button("加载更早的 50 条") {
+                                let anchor = model.messages.first?.id
+                                model.loadOlderMessages()
+                                if let anchor { DispatchQueue.main.async { reader.scrollTo(anchor, anchor: .top) } }
+                            }.font(.system(size: 12))
+                        }
                         if model.messages.isEmpty {
                             VStack(spacing: 12) {
                                 ThemeArtwork(theme: model.theme, activity: "happy").frame(width: 185, height: 150)
@@ -105,7 +112,9 @@ struct MainView: View {
                         if model.busy { HStack(spacing: 8) { ProgressView().controlSize(.small); Text(model.status).font(.system(size: 12)).foregroundStyle(.secondary); Button("取消") { model.cancel() }.buttonStyle(.borderless) }.id("busy") }
                         Color.clear.frame(height: 1).id("bottom")
                     }.padding(24)
-                }.onChange(of: model.messages.count) { _, _ in withAnimation { reader.scrollTo("bottom", anchor: .bottom) } }
+                }.onAppear { reader.scrollTo("bottom", anchor: .bottom) }
+                    .onChange(of: model.historyRevision) { _, _ in reader.scrollTo("bottom", anchor: .bottom) }
+                    .onChange(of: model.messages.last?.id) { _, _ in withAnimation { reader.scrollTo("bottom", anchor: .bottom) } }
                     .onChange(of: model.busy) { _, _ in withAnimation { reader.scrollTo("bottom", anchor: .bottom) } }
             }
             VStack(alignment: .leading, spacing: 10) {
@@ -154,10 +163,22 @@ struct MainView: View {
     private var appearanceView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(spacing: 8) {
-                    ThemeArtwork(theme: model.theme, activity: "idle").frame(height: 180)
-                    Text(model.theme.name).font(.headline)
-                }.frame(maxWidth: .infinity).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 14))
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], spacing: 14) {
+                    ForEach(model.themes) { theme in
+                        Button { model.chooseTheme(theme.id) } label: {
+                            VStack(spacing: 8) {
+                                ThemeArtwork(theme: theme, activity: "idle").frame(height: 110)
+                                HStack {
+                                    Text(theme.name).lineLimit(1)
+                                    if model.preferences.theme == theme.id { Image(systemName: "checkmark.circle.fill") }
+                                }
+                            }.padding(14).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        }.buttonStyle(.plain)
+                    }
+                }
+                Button("导入主题文件夹…") { model.importTheme() }
+                Text("选择包含 index.json、动画 PNG 和可选 Character.md 的文件夹。Character.md 定义人设、语气和口吻；场景及回复规则由系统提示词统一提供。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
                 card("桌面上的大小") {
                     HStack { Text("小巧"); Slider(value: $model.preferences.petSize, in: 120...245, step: 5) { _ in model.persist() }; Text("圆滚滚") }.font(.system(size: 12))
                 }
@@ -169,13 +190,14 @@ struct MainView: View {
             VStack(alignment: .leading, spacing: 16) {
                 card("观察与陪伴") {
                     Toggle("自动观察屏幕", isOn: Binding(get: { model.preferences.automatic }, set: { model.setAutomatic($0) }))
-                    Text("开启后，屏幕截图会发送到所配置的 API 服务进行识别。截图不保存到磁盘；锁屏和休眠时暂停。").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("开启后，屏幕截图会发送到所配置的 API 服务进行识别。请求与回复记录在本机 app.log；锁屏和休眠时暂停。").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack { Text("观察间隔"); Spacer(); Picker("观察间隔", selection: $model.preferences.interval) { Text("30 秒").tag(30.0); Text("1 分钟").tag(60.0); Text("2 分钟").tag(120.0); Text("5 分钟").tag(300.0) }.labelsHidden().frame(width: 120).onChange(of: model.preferences.interval) { _, _ in model.persist() } }
                     Toggle("观察所有显示器", isOn: $model.preferences.allDisplays).onChange(of: model.preferences.allDisplays) { _, _ in model.persist() }
                     HStack { Label(model.screenPermission ? "屏幕录制已授权" : "尚未授权屏幕录制", systemImage: model.screenPermission ? "checkmark.shield" : "lock.rectangle"); Spacer(); Button(model.screenPermission ? "系统设置" : "去授权") { model.requestPermission() } }
                     Text("授权后如仍无法截图，请退出并重新打开应用。").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 card("模型连接") { ConnectionSettingsView(model: model) }
+                card("系统提示词") { SystemPromptSettingsView(model: model) }
                 HStack {
                     Button("打开本地数据") { NSWorkspace.shared.open(model.store.directory) }
                     Spacer()
@@ -239,5 +261,39 @@ private struct ConnectionSettingsView: View {
             }
         }.textFieldStyle(.roundedBorder)
             .onAppear { configuration = model.preferences.api }
+    }
+}
+
+private struct SystemPromptSettingsView: View {
+    @ObservedObject var model: FishModel
+    @State private var text = ""
+    @State private var saved = ""
+    @State private var feedback = ""
+    @State private var failed = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("定义桌面陪伴场景和回复规则，所有形象共用。人设与语气由所选主题的 Character.md 提供。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            TextEditor(text: $text).font(.system(size: 12, design: .monospaced))
+                .frame(height: 250).padding(8).background(Color.black.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityLabel("系统提示词编辑框")
+            Text("可保留动态字段：{{currentTime}}、{{timeZone}}、{{mode}}、{{example}}、{{activities}}、{{memories}}。回复需包含 speech、activity、memories，便于应用解析。")
+                .font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
+            HStack {
+                Button("保存系统提示词") {
+                    do { try model.saveSystemPrompt(text); saved = text; feedback = "已保存，下次请求生效"; failed = false }
+                    catch { feedback = error.localizedDescription; failed = true }
+                }.buttonStyle(.borderedProminent)
+                Button("恢复默认") {
+                    do { text = try PromptBuilder.defaultSystemPrompt(); feedback = "已恢复默认内容，点击保存后生效"; failed = false }
+                    catch { feedback = error.localizedDescription; failed = true }
+                }
+                if text != saved { Text("未保存").foregroundStyle(.secondary) }
+            }
+            if !feedback.isEmpty { Text(feedback).font(.system(size: 11)).foregroundStyle(failed ? Color.red : Color.secondary) }
+        }.onAppear {
+            do { text = try model.preferences.systemPrompt ?? PromptBuilder.defaultSystemPrompt(); saved = text }
+            catch { feedback = error.localizedDescription; failed = true }
+        }
     }
 }

@@ -22,6 +22,7 @@ struct Preferences: Codable {
     var automatic = false
     var allDisplays = true
     var personality = "你是住在用户桌面上的蓝色小肥鱼，圆滚滚、爱摸鱼、贪吃，嘴欠但温暖。对眼前具体细节偶尔吐槽，也会惊喜或关心。不是客服，也不是效率监工。自称本肥鱼。不要反复使用同一梗，不评判用户娱乐。用简短自然的中文说话。"
+    var systemPrompt: String?
     var connection: APIConfiguration?
     var api: APIConfiguration { connection ?? APIConfiguration() }
     var petX: Double?
@@ -78,24 +79,6 @@ enum FishError: LocalizedError {
     var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
 }
 
-final class StateStore {
-    let directory: URL
-    var file: URL { directory.appendingPathComponent("state.json") }
-    init(directory: URL? = nil) {
-        self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FatFishFairy", isDirectory: true)
-    }
-    func load() throws -> SavedState {
-        guard FileManager.default.fileExists(atPath: file.path) else { return SavedState() }
-        return try JSONDecoder().decode(SavedState.self, from: Data(contentsOf: file))
-    }
-    func save(_ state: SavedState) throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(state).write(to: file, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-    }
-}
-
 struct FishTheme: Identifiable {
     let id: String
     let name: String
@@ -127,7 +110,7 @@ struct FishTheme: Identifiable {
             let valid = animations.filter { !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }
             guard !valid.isEmpty else { return nil }
             let slug = folder.lastPathComponent
-            let name = slug == defaultThemeID ? "蓝色小肥鱼" : slug
+            let name = slug == defaultThemeID ? "蓝色小肥鱼" : slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
             return FishTheme(id: slug, name: name, color: .systemCyan, directory: folder, animations: valid,
                              character: try? String(contentsOf: folder.appendingPathComponent("Character.md"), encoding: .utf8))
         }.sorted { $0.name < $1.name }
