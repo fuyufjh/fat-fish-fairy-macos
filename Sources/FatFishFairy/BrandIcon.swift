@@ -11,6 +11,16 @@ import SwiftUI
         #endif
         return NSImage(size: NSSize(width: 32, height: 32))
     }()
+
+    static func menuBarIcon(from source: NSImage) -> NSImage {
+        let icon = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.height * 0.22).addClip()
+            source.draw(in: rect)
+            return true
+        }
+        icon.isTemplate = false
+        return icon
+    }
 }
 
 struct BrandIcon: View {
