@@ -115,10 +115,9 @@ struct FishTheme: Identifiable {
         return nil
         #endif
     }
-    static let builtins: [FishTheme] = (bundledThemesRoot.map { imported(from: $0) } ?? []) + [
-        .init(id: "ocean", name: "蓝色小肥鱼", color: .systemCyan),
-        .init(id: "peach", name: "蜜桃小肥鱼", color: .systemPink),
-        .init(id: "mint", name: "薄荷小肥鱼", color: .systemTeal)
+    static let builtins: [FishTheme] = [
+        bundledThemesRoot.flatMap { imported(from: $0).first { $0.id == defaultThemeID } }
+            ?? FishTheme(id: defaultThemeID, name: "蓝色小肥鱼", color: .systemCyan)
     ]
     static func imported(from root: URL) -> [FishTheme] {
         let children = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
@@ -128,7 +127,7 @@ struct FishTheme: Identifiable {
             let valid = animations.filter { !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }
             guard !valid.isEmpty else { return nil }
             let slug = folder.lastPathComponent
-            let name = (slug == "loli_maid" || slug.hasPrefix("loli_maid-")) ? "萝莉小妹抖" : slug.hasPrefix("nurgling-") ? "纳垢灵" : slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
+            let name = slug == defaultThemeID ? "蓝色小肥鱼" : slug
             return FishTheme(id: slug, name: name, color: .systemCyan, directory: folder, animations: valid,
                              character: try? String(contentsOf: folder.appendingPathComponent("Character.md"), encoding: .utf8))
         }.sorted { $0.name < $1.name }

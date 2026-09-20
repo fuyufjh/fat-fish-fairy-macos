@@ -52,27 +52,11 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 - 小鱼的气泡 25 秒后收起；完整回复保留在聊天中。屏幕无新鲜事情时，模型可以选择安静。
 - 用户主动分享的偏好可成为长期记忆；屏幕观察不会写入长期记忆。「小鱼的记忆」中可单条移除。删除记忆不会删除原聊天文本。
 
-## 角色与主题
+## 桌面形象与图标
 
-默认内置「萝莉小妹抖」，包含 10 组动作、34 张动画帧以及角色性格文件，无需下载或导入。资源位于 `Sources/FatFishFairy/Resources/Themes/loli_maid/`，Swift Package、`.app` 和 DMG 都会携带。新安装默认选中此角色；更新时保留用户已经保存的角色选择。
+只保留「蓝色小肥鱼」（原「萝莉小妹抖」），包含 10 组动作、34 张动画帧和角色性格文件。升级后旧形象选择统一切换为此角色，聊天与记忆保留。不再提供其他形象和导入入口，仍可调整桌面大小。
 
-另有蓝色、蜜桃、薄荷三只代码绘制的小鱼，支持浮动、摆尾、眨眼、思考、睡觉等状态，大小可调整。三种配色共享设置中的性格；萝莉小妹抖使用随包的 `Character.md`。
-
-支持导入原项目主题目录：
-
-```text
-my-theme/
-  index.json       # 例如 {"coffee": 3, "programming": 3}
-  Character.md     # 可选；该角色的性格
-  coffee_1.png
-  coffee_2.png
-  coffee_3.png
-  ...
-```
-
-动画约每 0.4 秒切帧，模型根据场景选择动作。切换角色会开始新对话，保留长期记忆。导入目录会复制到本机应用数据目录。
-
-内置角色素材来自上游 `themes/loli_maid`，保留来源声明；未收录运行时不使用的 `reference.png`。素材来源及上游声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+动画位于 `Sources/FatFishFairy/Resources/Themes/loli_maid/`。App 图标源文件为 `Assets/AppIcon.png`，构建脚本自动生成各尺寸 ICNS；无需依赖下载目录。
 
 ## 本地数据与隐私
 

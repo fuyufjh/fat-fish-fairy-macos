@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
     @Published var preferences: Preferences
     @Published var messages: [ChatMessage]
     @Published var memories: [FishMemory]
-    @Published var themes = FishTheme.builtins
     @Published var status = "准备好陪你摸鱼了"
     @Published var bubble = "本肥鱼已就位。\n双击我，聊两句？"
     @Published var activity = "idle"
@@ -30,9 +29,8 @@ import UniformTypeIdentifiers
     private var generation = UUID()
     private var loadFailed = false
 
-    var theme: FishTheme { themes.first { $0.id == preferences.theme } ?? themes[0] }
+    var theme: FishTheme { FishTheme.builtins[0] }
     var activities: [String] { theme.directory == nil ? ["idle", "happy", "thinking", "sleeping", "programming", "coffee"] : theme.animations.keys.sorted() }
-    var themeRoot: URL { store.directory.appendingPathComponent("Themes", isDirectory: true) }
 
     init() {
         var state = SavedState()
@@ -41,7 +39,7 @@ import UniformTypeIdentifiers
         catch { loadError = "本地记录读取失败，已保留原文件。请先备份 state.json 后修复或移走该文件，再重新启动。" }
         preferences = state.preferences; messages = state.messages; memories = state.memories
         if let loadError { self.error = loadError; loadFailed = true }
-        themes += FishTheme.imported(from: themeRoot)
+        preferences.theme = FishTheme.defaultThemeID
         nextObservation = Date().addingTimeInterval(8)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -164,13 +162,6 @@ import UniformTypeIdentifiers
         }
     }
 
-    func chooseTheme(_ id: String) {
-        guard preferences.theme != id else { return }
-        cancel(); preferences.theme = id; activity = "idle"
-        messages = []; showBubble("换个样子，继续陪你。记得的事还在哦。")
-        persist()
-    }
-
     func saveConnection(_ configuration: APIConfiguration) throws {
         guard !loadFailed else { throw FishError.message("请先修复本地记录，再保存配置。") }
         var updated = preferences
@@ -198,32 +189,4 @@ import UniformTypeIdentifiers
         }
     }
 
-    func importTheme() {
-        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        panel.title = "选择包含 index.json 和动画 PNG 的主题文件夹"
-        guard panel.runModal() == .OK, let source = panel.url else { return }
-        do {
-            let data = try Data(contentsOf: source.appendingPathComponent("index.json"))
-            let index = try JSONDecoder().decode([String: Int].self, from: data)
-            guard !index.isEmpty, index.allSatisfy({ !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }) else { throw FishError.message("主题索引无效。") }
-            let name = source.lastPathComponent + "-" + UUID().uuidString.prefix(6)
-            let destination = themeRoot.appendingPathComponent(name, isDirectory: true)
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            do {
-                try data.write(to: destination.appendingPathComponent("index.json"))
-                for (animation, count) in index {
-                    for frame in 1...count {
-                        let file = "\(animation)_\(frame).png"
-                        guard NSImage(contentsOf: source.appendingPathComponent(file)) != nil else { throw FishError.message("主题缺少有效图片：\(file)") }
-                        try FileManager.default.copyItem(at: source.appendingPathComponent(file), to: destination.appendingPathComponent(file))
-                    }
-                }
-                if FileManager.default.fileExists(atPath: source.appendingPathComponent("Character.md").path) {
-                    try FileManager.default.copyItem(at: source.appendingPathComponent("Character.md"), to: destination.appendingPathComponent("Character.md"))
-                }
-            } catch { try? FileManager.default.removeItem(at: destination); throw error }
-            themes = FishTheme.builtins + FishTheme.imported(from: themeRoot)
-            chooseTheme(name)
-        } catch { self.error = "主题导入失败：\(error.localizedDescription)" }
-    }
 }

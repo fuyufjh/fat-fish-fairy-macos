@@ -93,7 +93,6 @@ final class PetPanel: NSPanel {
     }
     @objc func toggleObservation() { model.setAutomatic(!model.preferences.automatic) }
     @objc func observe() { model.observe() }
-    @objc func selectTheme(_ item: NSMenuItem) { if let id = item.representedObject as? String { model.chooseTheme(id) } }
     @objc func statusClicked() {
         guard let button = statusItem.button else { return }
         let menu = makeMenu()
@@ -106,12 +105,7 @@ final class PetPanel: NSPanel {
         for (title, action) in [("聊两句…", #selector(showWindow)), ("看一眼屏幕", #selector(observe)), (model.preferences.automatic ? "暂停自动观察" : "开始自动观察", #selector(toggleObservation)), (model.petVisible ? "隐藏小肥鱼" : "显示小肥鱼", #selector(togglePet))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item)
         }
-        let themeItem = NSMenuItem(title: "主题", action: nil, keyEquivalent: ""); let themeMenu = NSMenu()
-        for theme in model.themes {
-            let item = NSMenuItem(title: theme.name, action: #selector(selectTheme(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = theme.id; item.state = theme.id == model.preferences.theme ? .on : .off; themeMenu.addItem(item)
-        }
-        themeItem.submenu = themeMenu; menu.addItem(themeItem); menu.addItem(.separator())
+        menu.addItem(.separator())
         menu.addItem(withTitle: "退出小肥鱼", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }

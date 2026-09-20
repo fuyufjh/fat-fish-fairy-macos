@@ -18,7 +18,7 @@ struct MainView: View {
                 }.padding(.bottom, 30).padding(.top, 14)
                 nav("chat", "聊两句", "bubble.left.and.bubble.right")
                 nav("memory", "小鱼的记忆", "sparkles")
-                nav("appearance", "换个样子", "paintpalette")
+                nav("appearance", "桌面形象", "paintpalette")
                 nav("settings", "设置", "slider.horizontal.3")
                 Spacer()
                 ThemeArtwork(theme: model.theme, activity: model.activity).frame(width: 135, height: 115).frame(maxWidth: .infinity)
@@ -60,8 +60,8 @@ struct MainView: View {
         }.foregroundStyle(ink).tint(ocean).frame(minWidth: 830, minHeight: 630)
             .preferredColorScheme(.light)
     }
-    private var title: String { ["chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "今天想见哪条鱼？", "settings": "舒服地待在你身边。"][selection]! }
-    private var subtitle: String { ["chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "一点颜色，一点性格，都是你的小肥鱼。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
+    private var title: String { ["chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "蓝色小肥鱼", "settings": "舒服地待在你身边。"][selection]! }
+    private var subtitle: String { ["chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "调整小肥鱼在桌面上的大小。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
     private func nav(_ id: String, _ label: String, _ icon: String) -> some View {
         Button { selection = id } label: {
             HStack(spacing: 11) { Image(systemName: icon).frame(width: 18); Text(label); Spacer() }
@@ -154,24 +154,12 @@ struct MainView: View {
     private var appearanceView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], spacing: 14) {
-                    ForEach(model.themes) { theme in
-                        Button { model.chooseTheme(theme.id) } label: {
-                            VStack(spacing: 4) {
-                                ThemeArtwork(theme: theme, activity: "idle").frame(height: 110)
-                                HStack { Text(theme.name).lineLimit(1); if model.preferences.theme == theme.id { Image(systemName: "checkmark.circle.fill") } }.font(.system(size: 12, weight: .medium))
-                            }.padding(14).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(model.preferences.theme == theme.id ? ocean : .clear, lineWidth: 2))
-                        }.buttonStyle(.plain)
-                    }
-                }
-                Text("切换角色会开始新对话，记忆仍然保留。").font(.system(size: 11)).foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    ThemeArtwork(theme: model.theme, activity: "idle").frame(height: 180)
+                    Text(model.theme.name).font(.headline)
+                }.frame(maxWidth: .infinity).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 14))
                 card("桌面上的大小") {
                     HStack { Text("小巧"); Slider(value: $model.preferences.petSize, in: 120...245, step: 5) { _ in model.persist() }; Text("圆滚滚") }.font(.system(size: 12))
-                }
-                card("带上你喜欢的角色") {
-                    Text("已内置萝莉小妹抖。也可以导入原版格式的 index.json、Character.md 和逐帧 PNG 主题。").font(.system(size: 12)).foregroundStyle(.secondary)
-                    Button("导入主题文件夹…") { model.importTheme() }
                 }
             }.padding(26)
         }
@@ -188,11 +176,6 @@ struct MainView: View {
                     Text("授权后如仍无法截图，请退出并重新打开应用。").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 card("模型连接") { ConnectionSettingsView(model: model) }
-                card("小肥鱼的性格") {
-                    TextEditor(text: $model.preferences.personality).font(.system(size: 12)).frame(height: 80).scrollContentBackground(.hidden).padding(8).background(Color.black.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
-                        .onChange(of: model.preferences.personality) { _, _ in model.persist() }
-                    Text("用于三种配色小鱼；萝莉小妹抖和导入主题优先使用自己的 Character.md。").font(.system(size: 10)).foregroundStyle(.secondary)
-                }
                 HStack {
                     Button("打开本地数据") { NSWorkspace.shared.open(model.store.directory) }
                     Spacer()
@@ -212,6 +195,7 @@ private struct ConnectionSettingsView: View {
     @State private var configuration = APIConfiguration()
     @State private var feedback = ""
     @State private var failed = false
+    @State private var advancedExpanded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             LabeledContent("Base URL") {
@@ -223,7 +207,13 @@ private struct ConnectionSettingsView: View {
             LabeledContent("API Key") {
                 SecureField("API Key", text: $configuration.apiKey).accessibilityLabel("API Key")
             }
-            DisclosureGroup("高级选项") {
+            Button { advancedExpanded.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right").foregroundStyle(.secondary)
+                    Text("高级选项")
+                }
+            }.buttonStyle(.plain).accessibilityValue(advancedExpanded ? "展开" : "折叠")
+            if advancedExpanded {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("thinking · 思考模式", selection: $configuration.thinkingEnabled) {
                         Text("disabled").tag(false)
@@ -234,7 +224,7 @@ private struct ConnectionSettingsView: View {
                     }
                     Text("none 关闭思考；low / high / max 开启思考并指定强度。服务和模型需支持这些选项及图片输入。")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
-                }.padding(.top, 10)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
                 Button("保存连接配置") {
