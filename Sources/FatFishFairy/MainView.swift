@@ -10,7 +10,7 @@ struct MainView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 9) {
-                    Image(systemName: "fish.fill").font(.title2).foregroundStyle(ocean)
+                    BrandIcon(size: 28)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("小肥鱼").font(.system(size: 18, weight: .bold, design: .rounded))
                         Text("FAT FISH FAIRY").font(.system(size: 8, weight: .semibold)).tracking(1.8).foregroundStyle(.secondary)
@@ -96,7 +96,7 @@ struct MainView: View {
                         ForEach(model.messages) { message in
                             HStack(alignment: .top, spacing: 10) {
                                 if message.role == "user" { Spacer(minLength: 60) }
-                                else { Image(systemName: "fish.fill").foregroundStyle(ocean).padding(8).background(ocean.opacity(0.08), in: Circle()) }
+                                else { BrandIcon(size: 34) }
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack {
                                         Text(message.role == "user" ? "你" : "小肥鱼").fontWeight(.semibold)

@@ -45,7 +45,11 @@ final class PetPanel: NSPanel {
         restorePetPosition()
         pet.orderFrontRegardless()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "fish.fill", accessibilityDescription: "小肥鱼")
+        let menuIcon = AppBrand.image.copy() as! NSImage
+        menuIcon.size = NSSize(width: 18, height: 18)
+        menuIcon.isTemplate = false
+        statusItem.button?.image = menuIcon
+        statusItem.button?.setAccessibilityLabel("小肥鱼")
         statusItem.button?.target = self; statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         let workspace = NSWorkspace.shared.notificationCenter

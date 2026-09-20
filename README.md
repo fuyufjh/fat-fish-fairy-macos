@@ -58,7 +58,7 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 
 主题文件夹包含 `index.json`（动作名称到帧数的映射，如 `{"idle": 2}`）、对应 `idle_1.png` / `idle_2.png` 等动画图片，以及可选的 `Character.md`。导入时验证全部图片后复制到本地 `Themes/`，重启后保留选择；旧版已导入主题也会恢复显示。
 
-动画位于 `Sources/FatFishFairy/Resources/Themes/loli_maid/`。App 图标源文件为 `Assets/AppIcon.png`，构建脚本自动生成各尺寸 ICNS；无需依赖下载目录。
+动画位于 `Sources/FatFishFairy/Resources/Themes/loli_maid/`。App 图标源文件为 `Sources/FatFishFairy/Resources/AppIcon.png`，侧边栏、聊天头像与系统状态栏共用此图标，构建脚本自动生成各尺寸 ICNS；无需依赖下载目录。
 
 ## 系统提示词与人设
 
