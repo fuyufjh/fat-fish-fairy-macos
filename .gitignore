@@ -5,3 +5,10 @@ dist/
 .DS_Store
 *.log
 .swiftpm/
+
+# Signing private material stays in Keychain, never in Git.
+*.p12
+*.pfx
+*.key
+*.keychain
+*.keychain-db

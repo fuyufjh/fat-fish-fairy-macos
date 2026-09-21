@@ -24,6 +24,7 @@ final class StateStore {
         try execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         try execute("CREATE TABLE IF NOT EXISTS messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, role TEXT NOT NULL, text TEXT NOT NULL, date REAL NOT NULL, observation INTEGER NOT NULL)")
         try execute("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT NOT NULL, date REAL NOT NULL)")
+        try execute("CREATE TABLE IF NOT EXISTS screen_observations (seq INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL)")
         // Import and completion marker commit together. A bad legacy file is left untouched.
         try transaction {
             if try rows("SELECT value FROM metadata WHERE key = 'initialized'").isEmpty {
@@ -62,6 +63,17 @@ final class StateStore {
     func save(_ state: SavedState) throws {
         try open()
         try transaction { try write(state) }
+    }
+    func screenHistory() throws -> [String] {
+        try open()
+        return try rows("SELECT content FROM screen_observations ORDER BY seq DESC LIMIT 3").reversed().map { $0[0] }
+    }
+    func appendScreenContent(_ content: String) throws {
+        try open()
+        try transaction {
+            try execute("INSERT INTO screen_observations(content) VALUES(?)", [content])
+            try execute("DELETE FROM screen_observations WHERE seq NOT IN (SELECT seq FROM screen_observations ORDER BY seq DESC LIMIT 3)")
+        }
     }
     private func write(_ state: SavedState) throws {
         let preferences = String(decoding: try JSONEncoder().encode(state.preferences), as: UTF8.self)

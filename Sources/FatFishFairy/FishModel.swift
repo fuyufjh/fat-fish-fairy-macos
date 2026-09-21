@@ -160,12 +160,16 @@ import UniformTypeIdentifiers
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 status = "F · 小肥鱼想一想…"
+                let screenHistory = observation ? try store.screenHistory() : []
                 let reply = try await client.respond(key: key, configuration: configuration, personality: personality, systemPrompt: systemPrompt, memories: memoryTexts,
-                                                     history: history, text: text, images: images, observation: observation, activities: actions)
+                                                     history: history, text: text, images: images, observation: observation, activities: actions, screenHistory: screenHistory)
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 failures = 0; busy = false
-                if observation { lastObservation = Date() }
+                if observation {
+                    if let content = reply.screenContent { try store.appendScreenContent(content) }
+                    lastObservation = Date()
+                }
                 activity = actions.contains(reply.activity) ? reply.activity : actions[0]
                 if !reply.speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     messages.append(ChatMessage(role: "assistant", text: reply.speech, observation: observation))

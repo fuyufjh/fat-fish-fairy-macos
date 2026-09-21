@@ -44,6 +44,7 @@ struct ResponseRegressionTests {
     static func completion(_ text: String?, finish: String = "stop") throws -> Data {
         try JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": text as Any? ?? NSNull()], "finish_reason": finish]], "usage": ["completion_tokens": 30]])
     }
+    static func tryEmptyHistory(_ store: StateStore) -> Bool { (try? store.screenHistory()) == [] }
     static func run() async throws {
         try SmokeTests.check(Preferences().allDisplays, "all displays on by default")
         var preferences = Preferences(); preferences.allDisplays = false
@@ -62,8 +63,8 @@ struct ResponseRegressionTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let diagnostics = directory.appendingPathComponent("request.json")
         let client = DeepSeekClient(session: session, diagnosticsURL: diagnostics)
-        let valid = "{\"speech\":\"ok\",\"activity\":\"idle\",\"memories\":[]}"
-        let fixtures: [(String?, String)] = [(nil,"stop"), ("  ","stop"), ("{\"speech\":\"unfinished", "length"), ("[]", "stop"), ("{\"speech\":17}", "stop")]
+        let valid = "{\"screenContent\":\"用户正在调试代码\",\"speech\":\"ok\",\"activity\":\"idle\",\"memories\":[]}"
+        let fixtures: [(String?, String)] = [(nil,"stop"), ("  ","stop"), ("{\"speech\":\"unfinished", "length"), ("[]", "stop"), ("{\"speech\":17}", "stop"), ("{\"speech\":\"old format\"}", "stop"), ("{\"speech\":\"\",\"screenContent\":\"  \"}", "stop")]
         for (text, finish) in fixtures {
             StubProtocol.reset([(200, try completion(text, finish: finish)), (200, try completion(valid))])
             let result = try await client.respond(key: "test-only-key", personality: "test", memories: [], history: [ChatMessage(role: "assistant", text: "earlier reply")], text: "test", images: [Data([1]), Data([2])], observation: true, activities: ["idle"])
@@ -76,13 +77,33 @@ struct ResponseRegressionTests {
             try SmokeTests.check(a == b, "same multi-display images reused for retry")
             let blocks = firstMessages.last!["content"] as! [[String: Any]]
             try SmokeTests.check(blocks.filter { $0["type"] as? String == "image_url" }.count == 2, "both displays retained")
-            let previous = firstMessages.first { $0["role"] as? String == "assistant" }!["content"] as! String
-            try SmokeTests.check((try? ModelReply.parse(previous))?.speech == "earlier reply", "assistant history encoded consistently")
+            let payload = String(decoding: try JSONSerialization.data(withJSONObject: firstMessages), as: UTF8.self)
+            try SmokeTests.check(!payload.contains("earlier reply") && !firstMessages.contains { $0["role"] as? String == "assistant" }, "observation excludes speech history on retry")
             let report = try JSONDecoder().decode(RequestDiagnostics.self, from: Data(contentsOf: diagnostics))
             try SmokeTests.check(report.imageCount == 2 && report.attempts.count == 2 && report.attempts.last?.outcome == "success", "sanitized diagnostics include recovery")
             let raw = try String(contentsOf: diagnostics, encoding: .utf8)
             try SmokeTests.check(!raw.contains("test-only-key") && !raw.contains("earlier reply") && !raw.contains("base64"), "diagnostics exclude private payload")
         }
+        let store = StateStore(directory: directory.appendingPathComponent("state"))
+        try SmokeTests.check(tryEmptyHistory(store), "no fabricated observations on first launch")
+        for i in 1...4 { try store.appendScreenContent("screen-marker-\(i)") }
+        let history = try StateStore(directory: store.directory).screenHistory()
+        try SmokeTests.check(history == ["screen-marker-2", "screen-marker-3", "screen-marker-4"], "only three summaries survive reopening in order")
+        let silent = "{\"screenContent\":\"用户正在阅读文档\",\"speech\":\"\"}"
+        StubProtocol.reset([(200, try completion(silent))])
+        let result = try await client.respond(key: "test", personality: "test", systemPrompt: "legacy-custom-prompt", memories: ["memory-marker"], history: [ChatMessage(role: "user", text: "chat-marker"), ChatMessage(role: "assistant", text: "speech-marker", observation: true)], text: "test", images: [Data([1])], observation: true, activities: ["idle"], screenHistory: ["screen-marker-1"] + history)
+        try SmokeTests.check(result.speech.isEmpty && result.screenContent == "用户正在阅读文档", "silent observation still produces work summary")
+        let payload = String(decoding: try JSONSerialization.data(withJSONObject: StubProtocol.bodies[0]), as: UTF8.self)
+        try SmokeTests.check(!payload.contains("screen-marker-1") && history.allSatisfy { payload.contains($0) }, "request includes only latest three summaries")
+        try SmokeTests.check(!payload.contains("speech-marker") && !payload.contains("chat-marker") && !payload.contains("memory-marker"), "observation excludes previous speech, chat and memories")
+        try SmokeTests.check(payload.contains("screenContent") && payload.contains("legacy-custom-prompt"), "new observation contract applies with custom prompts")
+        try store.appendScreenContent(result.screenContent!)
+        let afterSilence = try store.screenHistory()
+        try SmokeTests.check(afterSilence == ["screen-marker-3", "screen-marker-4", "用户正在阅读文档"], "silent observation advances summary window")
+        StubProtocol.reset([(200, try completion("{\"speech\":\"hello\"}"))])
+        _ = try await client.respond(key: "test", personality: "test", memories: [], history: [ChatMessage(role: "assistant", text: "manual-reply"), ChatMessage(role: "assistant", text: "observation-speech", observation: true)], text: "test", images: [], observation: false, activities: ["idle"], screenHistory: history)
+        let chatPayload = String(decoding: try JSONSerialization.data(withJSONObject: StubProtocol.bodies[0]), as: UTF8.self)
+        try SmokeTests.check(chatPayload.contains("manual-reply") && !chatPayload.contains("observation-speech") && !chatPayload.contains("screen-marker"), "manual chat keeps its own history without observation speech")
         StubProtocol.reset([(200, try completion("{}")), (200, try completion("{}"))])
         do {
             _ = try await client.respond(key: "test", personality: "test", memories: [], history: [], text: "test", images: [], observation: false, activities: ["idle"])

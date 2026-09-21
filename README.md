@@ -6,7 +6,7 @@
 
 构建好的应用在 `dist/FatFishFairy.app`，可以直接双击。关闭聊天窗口后，桌面小鱼与菜单栏仍继续运行；通过菜单栏或 `⌘Q` 完全退出。
 
-一键编译并生成 DMG（只需 Apple Command Line Tools；未安装时先执行 `xcode-select --install`）：
+一键编译并生成 DMG（需要 Apple Command Line Tools 及本项目固定签名的私钥；未安装工具时先执行 `xcode-select --install`）：
 
 ```sh
 ./build.sh
@@ -22,7 +22,13 @@ APP_VERSION=1.0.1 ./build.sh           # 自定义版本号
 
 脚本可从任何工作目录调用，先在临时目录构建并验证签名、DMG 完整性，全部成功后替换输出；失败时保留旧产物。`dist/` 已被 Git 忽略。
 
-默认使用本机 ad-hoc 签名，尚未 Apple 公证；当前构建针对本机架构。若有 Developer ID，可设置 `CODE_SIGN_IDENTITY='Developer ID Application: 你的名称 (TEAMID)'` 指定签名身份，公证仍需自行完成。
+默认使用登录钥匙串中的固定自签名身份 `FatFishFairy Local Code Signing`，公钥证书位于 `signing/FatFishFairy.cer`。签名规则同时固定 Bundle ID 和证书指纹，不再绑定每个版本的代码哈希；找不到对应私钥就终止构建，不退回 ad-hoc。当前构建针对本机架构，未经过 Apple 公证，不属于 Developer ID 分发签名。
+
+从旧版 ad-hoc 切换到此证书后，需要重新授予一次屏幕录制权限；后续更新保持同一证书和 Bundle ID，避免因签名身份变化丢失授权。安装后从固定的 `/Applications/FatFishFairy.app` 启动。
+
+公开证书、构建脚本和签名规则可以提交 Git；私钥只在登录钥匙串中，`.p12`、`.pfx`、`.key` 和钥匙串文件已加入忽略规则。更换电脑或配置 CI 时，需要通过安全渠道导入同一身份的私钥备份（密码加密的 `.p12`），仅克隆仓库无法生成相同签名。不要重新生成证书或只用同名证书替代，否则仍会改变权限身份。
+
+`scripts/setup-signing.sh` 仅用于项目首次建立身份：在公钥证书不存在时生成一张有效期十年的代码签名证书，将私钥导入登录钥匙串，并清理临时私钥文件。证书已存在时拒绝重建。若以后切换 Developer ID，需要显式更新签名配置，并重新授权一次。
 
 ## 配置模型连接
 
@@ -49,16 +55,19 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 - 默认观察所有显示器，也可关闭该选项，只观察主显示器。截图排除本应用窗口，缩放至最长边 1440 像素后发往所配置的 API 服务，多张截图合并为一条回应。
 - 锁屏、休眠和会话切换时取消当前请求并暂停；恢复后继续。请求串行执行，可取消；自动观察失败时退避重试，最长 5 分钟。
 - 点击图片按钮附图聊天；支持 PNG、JPEG、WebP、GIF（首帧）及 HEIC，最大文件 32 MB，发送前转换为 JPEG。
+- 每次读屏分别输出 `screenContent`（用户当前工作的客观摘要）和 `speech`（对用户说的话）。下一次读屏只携带当前截图及最近三次成功观察的工作摘要作为上下文历史，不携带此前 speech、手动聊天或长期记忆；不足三次按实际次数。摘要独立保存到 SQLite，安静时也更新，重启后保留最近三次。手动聊天只使用手动对话历史，读屏 speech 仍在聊天窗口显示。
 - 小鱼的气泡 25 秒后收起；完整回复保留在聊天中。屏幕无新鲜事情时，模型可以选择安静。
 - 用户主动分享的偏好可成为长期记忆；屏幕观察不会写入长期记忆。「小鱼的记忆」中可单条移除。删除记忆不会删除原聊天文本。
 
 ## 桌面形象与图标
 
-内置仅有「蓝色小肥鱼」（原「萝莉小妹抖」），包含 10 组动作、34 张动画帧。可在「桌面形象」导入自定义主题文件夹，或从桌面右键/菜单栏菜单切换。切换形象保留聊天和记忆。
+内置「蓝色小肥鱼」（默认，原「萝莉小妹抖」）和「长大的妹抖」两套形象，各自包含完整动画和精简角色人设（100 字以内）。可在「桌面形象」导入自定义主题文件夹，或从桌面右键/菜单栏菜单切换。切换形象保留聊天和记忆。
+
+上游 `grown_maid_long` 目前只有参考图，缺少动画和主题配置，未作为可用皮肤内置。
 
 主题文件夹包含 `index.json`（动作名称到帧数的映射，如 `{"idle": 2}`）、对应 `idle_1.png` / `idle_2.png` 等动画图片，以及可选的 `Character.md`。导入时验证全部图片后复制到本地 `Themes/`，重启后保留选择；旧版已导入主题也会恢复显示。
 
-动画位于 `Sources/FatFishFairy/Resources/Themes/loli_maid/`。App 图标源文件为 `Sources/FatFishFairy/Resources/AppIcon.png`，侧边栏、聊天头像与系统状态栏共用此图标，构建脚本自动生成各尺寸 ICNS；无需依赖下载目录。
+动画位于 `Sources/FatFishFairy/Resources/Themes/`。App 图标源文件为 `Sources/FatFishFairy/Resources/AppIcon.png`，侧边栏、聊天头像与系统状态栏共用此图标，构建脚本自动生成各尺寸 ICNS；无需依赖下载目录。
 
 ## 系统提示词与人设
 
@@ -87,16 +96,16 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 
 ### GitHub Actions
 
-- 提交到 `main` 的 PR，以及 `main` 上的 push，自动在 macOS 26 / Apple Silicon runner 编译 Release App、验证签名并运行离线测试，无需 API Key。
+- 提交到 `main` 的 PR 和 `main` 上的 push 在 macOS 26 / Apple Silicon runner 编译并运行离线测试，无需 API Key。PR 不读取签名私钥；`main` push 通过测试后打包固定签名的 DMG，保留 14 天 artifact。也可在 Actions 手动运行 `macOS CI`，填写版本号（仅 main 分支打包）。
 - 推送 `v1.2.3` 格式的版本 tag，自动测试、编译打包 arm64 DMG，并发布到对应的 GitHub Release；Actions 中也保留 30 天的 DMG artifact。
 - tag 必须指向 `main` 历史中的提交，否则发布检查失败。版本号由 tag 去掉 `v` 后写入 App 和 DMG 文件名；暂不支持预发布后缀。
-- CI 安装包使用 ad-hoc 签名，未经过 Apple 公证，与本地默认构建一致。
+- CI 使用与本地相同的固定签名，未经过 Apple 公证。仓库 Actions Secrets 保存 `MACOS_SIGNING_P12_BASE64`（密码加密的 PKCS#12 文件的 Base64）和 `MACOS_SIGNING_P12_PASSWORD`（解密密码）；构建时导入临时钥匙串，结束后清理。只上传 DMG，不上传私钥或钥匙串。
 
 发布示例（先确认目标提交已推送到 GitHub `main`）：
 
 ```sh
 git tag v1.0.1
-git push github v1.0.1
+git push origin v1.0.1
 ```
 
 ### 本地检查

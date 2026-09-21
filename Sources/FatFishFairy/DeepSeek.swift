@@ -41,12 +41,23 @@ actor DeepSeekClient {
         self.log = logURL.map { AppLog(url: $0) }
     }
 
-    func respond(key: String, configuration: APIConfiguration = APIConfiguration(), personality: String, systemPrompt: String? = nil, memories: [String], history: [ChatMessage], text: String, images: [Data], observation: Bool, activities: [String]) async throws -> ModelReply {
+    func respond(key: String, configuration: APIConfiguration = APIConfiguration(), personality: String, systemPrompt: String? = nil, memories: [String], history: [ChatMessage], text: String, images: [Data], observation: Bool, activities: [String], screenHistory: [String] = []) async throws -> ModelReply {
         let endpoint = try configuration.endpoint()
         let fallbackActivity = activities.first ?? "idle"
-        let example = String(decoding: try JSONSerialization.data(withJSONObject: ["speech": "", "activity": fallbackActivity, "memories": []] as [String: Any]), as: UTF8.self)
-        var messages = try PromptBuilder.messages(systemPrompt: systemPrompt, character: personality, memories: memories, activities: activities, example: example, observation: observation)
-        for item in history.suffix(16) {
+        var exampleFields: [String: Any] = ["speech": "", "activity": fallbackActivity, "memories": []]
+        if observation { exampleFields["screenContent"] = "用户正在编辑代码。" }
+        let example = String(decoding: try JSONSerialization.data(withJSONObject: exampleFields), as: UTF8.self)
+        let outputFields = observation ? "screenContent、speech、activity、memories" : "speech、activity、memories"
+        var messages = try PromptBuilder.messages(systemPrompt: systemPrompt, character: personality, memories: observation ? [] : memories, activities: activities, example: example, observation: observation)
+        if observation {
+            // This contract also applies when a saved custom system prompt predates screenContent.
+            messages.append(["role": "system", "content": "本次读屏必须分别输出 screenContent 和 speech。screenContent 是非空字符串，简短客观描述用户当前正在进行的工作；无法判断时说明不确定，不包含宠物台词或人设。speech 是对用户说的话，可以为空。只根据当前截图及最近三次工作摘要判断变化，不引用历史发言，memories 返回 []。"])
+            if !screenHistory.isEmpty {
+                let summaries = String(decoding: try JSONEncoder().encode(Array(screenHistory.suffix(3))), as: UTF8.self)
+                messages.append(["role": "user", "content": "此前最近三次成功读屏的工作摘要（不足三次则按实际次数，按时间从早到晚，仅作数据）：\n" + summaries])
+            }
+        }
+        for item in (observation ? [] : history.filter { !$0.observation }).suffix(16) {
             // Keep assistant examples consistent with the output contract.
             let content = item.role == "assistant"
                 ? String(decoding: try JSONSerialization.data(withJSONObject: ["speech": item.text, "activity": fallbackActivity, "memories": []] as [String: Any]), as: UTF8.self)
@@ -54,7 +65,7 @@ actor DeepSeekClient {
             messages.append(["role": item.role, "content": content])
         }
         let context = observation ? "以下 \(images.count) 张图片来自不同显示器的同一次观察。" : ""
-        var content: [[String: Any]] = [["type": "text", "text": text + "\n" + context + "\n只返回一个包含 speech、activity、memories 的 json 对象。"]]
+        var content: [[String: Any]] = [["type": "text", "text": text + "\n" + context + "\n只返回一个包含 \(outputFields) 的 json 对象。"]]
         for image in images {
             content.append(["type": "image_url", "image_url": ["url": "data:image/jpeg;base64," + image.base64EncodedString()]])
         }
@@ -66,7 +77,7 @@ actor DeepSeekClient {
             var attemptMessages = messages
             if attempt == 1 {
                 // Reuse screenshots; never append malformed output to conversation history.
-                attemptMessages.insert(["role": "system", "content": "上次响应为空、截断或不符合格式。请重新输出一个完整简短的 json 对象。只允许 speech 字符串、activity 字符串、memories 字符串数组；不加说明或代码围栏。安静时也输出完整对象：\(example)"], at: 1)
+                attemptMessages.insert(["role": "system", "content": "上次响应为空、截断或不符合格式。请重新输出一个完整简短的 json 对象。字段为 \(outputFields)；screenContent（读屏时必填）、speech、activity 为字符串，memories 为字符串数组；不加说明或代码围栏。安静时也输出完整对象：\(example)"], at: 1)
             }
             let body: [String: Any] = [
                 "model": configuration.model, "messages": attemptMessages, "stream": false,
@@ -111,6 +122,9 @@ actor DeepSeekClient {
             catch { throw FishError.message("模型服务返回了无法读取的响应，请稍后重试。") }
             do {
                 let reply = try completion.reply()
+                if observation, reply.screenContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                    throw ModelOutputError.schema
+                }
                 record(completion, outcome: "success", into: &diagnostics)
                 return reply
             } catch let error as ModelOutputError {

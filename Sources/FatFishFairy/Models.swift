@@ -37,14 +37,16 @@ struct SavedState: Codable {
 
 struct ModelReply: Decodable {
     let speech: String
+    let screenContent: String?
     let activity: String
     let memories: [String]
 
-    enum CodingKeys: String, CodingKey { case speech, activity, memories }
+    enum CodingKeys: String, CodingKey { case speech, screenContent, activity, memories }
     init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
         // Require speech: a malformed response must never be treated as intentional silence.
         speech = try fields.decode(String.self, forKey: .speech)
+        screenContent = try fields.decodeIfPresent(String.self, forKey: .screenContent)
         activity = try fields.decodeIfPresent(String.self, forKey: .activity) ?? "idle"
         memories = try fields.decodeIfPresent([String].self, forKey: .memories) ?? []
     }
@@ -98,10 +100,19 @@ struct FishTheme: Identifiable {
         return nil
         #endif
     }
-    static let builtins: [FishTheme] = [
-        bundledThemesRoot.flatMap { imported(from: $0).first { $0.id == defaultThemeID } }
-            ?? FishTheme(id: defaultThemeID, name: "蓝色小肥鱼", color: .systemCyan)
-    ]
+    static let builtins = bundled(from: bundledThemesRoot)
+
+    static func bundled(from root: URL?) -> [FishTheme] {
+        var themes = root.map { imported(from: $0) } ?? []
+        if !themes.contains(where: { $0.id == defaultThemeID }) {
+            themes.append(FishTheme(id: defaultThemeID, name: "蓝色小肥鱼", color: .systemCyan))
+        }
+        return themes.sorted {
+            if $0.id == defaultThemeID { return $1.id != defaultThemeID }
+            if $1.id == defaultThemeID { return false }
+            return $0.id < $1.id
+        }
+    }
     static func imported(from root: URL) -> [FishTheme] {
         let children = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         return children.compactMap { folder in
@@ -110,7 +121,8 @@ struct FishTheme: Identifiable {
             let valid = animations.filter { !$0.key.contains("/") && !$0.key.contains("..") && (1...100).contains($0.value) }
             guard !valid.isEmpty else { return nil }
             let slug = folder.lastPathComponent
-            let name = slug == defaultThemeID ? "蓝色小肥鱼" : slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
+            let names = [defaultThemeID: "蓝色小肥鱼", "grown_maid": "长大的妹抖"]
+            let name = names[slug] ?? slug.replacingOccurrences(of: "-[A-F0-9]{6}$", with: "", options: .regularExpression)
             return FishTheme(id: slug, name: name, color: .systemCyan, directory: folder, animations: valid,
                              character: try? String(contentsOf: folder.appendingPathComponent("Character.md"), encoding: .utf8))
         }.sorted { $0.name < $1.name }

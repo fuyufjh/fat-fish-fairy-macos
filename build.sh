@@ -10,13 +10,13 @@ case "${1:-}" in
   -h|--help)
     echo "Usage: ./build.sh [--app-only]"
     echo "Default: build dist/FatFishFairy.app and dist/FatFishFairy-<version>-<arch>.dmg"
-    echo "Optional environment: APP_VERSION=1.0.0 CODE_SIGN_IDENTITY='Developer ID Application: …'"
+    echo "Optional environment: APP_VERSION=1.0.0"
     exit 0 ;;
   *) echo "Unknown option: $1" >&2; exit 2 ;;
 esac
 if [ "$#" -gt 1 ]; then echo "Too many arguments. Use --help." >&2; exit 2; fi
 if [ "$(uname -s)" != Darwin ]; then echo "Build this project on macOS." >&2; exit 1; fi
-for tool in swift xcrun python3 codesign iconutil ditto hdiutil; do
+for tool in swift xcrun python3 codesign iconutil ditto hdiutil security openssl; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Missing tool: $tool. Install Apple Command Line Tools: xcode-select --install" >&2
     exit 1
@@ -28,7 +28,22 @@ APP_VERSION="${APP_VERSION:-1.0.0}"
 if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "APP_VERSION must have the form 1.0.0." >&2; exit 2
 fi
-SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+# Pin the certificate, not its display name or a changing executable hash.
+CERT="$ROOT/signing/FatFishFairy.cer"
+if [ ! -f "$CERT" ]; then
+  echo "Missing public signing certificate: $CERT" >&2; exit 1
+fi
+SIGN_IDENTITY="$(openssl x509 -inform DER -in "$CERT" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
+if [[ ! "$SIGN_IDENTITY" =~ ^[A-F0-9]{40}$ ]]; then
+  echo "Invalid signing certificate fingerprint." >&2; exit 1
+fi
+if [ -n "${CODE_SIGN_IDENTITY:-}" ] && [ "$CODE_SIGN_IDENTITY" != "$SIGN_IDENTITY" ]; then
+  echo "CODE_SIGN_IDENTITY differs from the pinned certificate. Refusing to change the app identity." >&2; exit 1
+fi
+if ! security find-identity -p codesigning | grep -Fq "$SIGN_IDENTITY"; then
+  echo "The pinned signing identity is missing from your keychains. Restore its certificate and private key; ad-hoc fallback is disabled." >&2; exit 1
+fi
+SIGN_REQUIREMENT="identifier \"com.fatfishfairy.macos\" and certificate leaf = H\"$SIGN_IDENTITY\""
 ARCH="$(uname -m)"
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
@@ -74,8 +89,8 @@ with open(os.environ['APP_PATH'] + '/Contents/Info.plist', 'wb') as output:
     plistlib.dump(info, output)
 PY
 # The bundle is assembled from an explicit allowlist; .secret is never copied.
-codesign --force --sign "$SIGN_IDENTITY" --identifier com.fatfishfairy.macos "$APP"
-codesign --verify --deep --strict "$APP"
+codesign --force --sign "$SIGN_IDENTITY" --identifier com.fatfishfairy.macos --requirements "=designated => $SIGN_REQUIREMENT" "$APP"
+codesign --verify --deep --strict -R "=$SIGN_REQUIREMENT" "$APP"
 
 if [ "$MAKE_DMG" = 1 ]; then
   IMAGE_ROOT="$WORK/image"
@@ -92,7 +107,7 @@ if [ "$MAKE_DMG" = 1 ]; then
 4. 按提示授予小肥鱼屏幕录制权限，再开启自动观察。
 
 需要 macOS 14 或更新版本。识图和对话默认使用 deepseek-flash，可在设置中修改。
-已内置默认形象「蓝色小肥鱼」，无需另行下载或导入。
+已内置「蓝色小肥鱼」和「长大的妹抖」，可在「桌面形象」切换，无需另行下载或导入。
 安装包不包含 API 密钥、聊天记录、记忆或导入的主题。
 默认构建仅本机签名，未经过 Apple 公证。
 TEXT

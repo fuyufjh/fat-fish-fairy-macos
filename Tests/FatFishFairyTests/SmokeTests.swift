@@ -52,10 +52,17 @@ import AppKit
         try check(Preferences().theme == "loli_maid" && maid.name == "蓝色小肥鱼", "maid is default with correct display name")
         try check(maid.animations.count == 10 && maid.animations.values.reduce(0, +) == 34, "complete bundled animation index")
         try check(!(maid.character ?? "").isEmpty, "bundled character personality present")
-        for (name, count) in maid.animations {
-            for frame in 1...count {
-                let file = maid.directory!.appendingPathComponent("\(name)_\(frame).png")
-                try check(NSImage(contentsOf: file) != nil, "bundled frame decodes: \(name)_\(frame)")
+        let bundled = FishTheme.bundled(from: bundledRoot)
+        try check(bundled.map(\.id) == ["loli_maid", "grown_maid"], "all bundled themes available, default first")
+        try check(bundled.map(\.name) == ["蓝色小肥鱼", "长大的妹抖"], "bundled display names")
+        for theme in bundled {
+            try check(!(theme.character ?? "").isEmpty, "character present: \(theme.id)")
+            try check(theme.animations.count == 10, "complete actions: \(theme.id)")
+            for (name, count) in theme.animations {
+                for frame in 1...count {
+                    let file = theme.directory!.appendingPathComponent("\(name)_\(frame).png")
+                    try check(NSImage(contentsOf: file) != nil, "bundled frame decodes: \(theme.id)/\(name)_\(frame)")
+                }
             }
         }
         try await ResponseRegressionTests.run()

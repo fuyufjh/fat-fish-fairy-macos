@@ -17,7 +17,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -36,15 +36,46 @@ jobs:
           echo "APP_VERSION=${VERSION_TAG#v}" >> "$GITHUB_ENV"
       - name: Run offline tests
         run: ./scripts/test.sh
+      - name: Import pinned signing identity
+        env:
+          MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${MACOS_SIGNING_P12_BASE64:?Missing signing certificate secret}"
+          : "${MACOS_SIGNING_P12_PASSWORD:?Missing signing password secret}"
+          python3 - <<'PY'
+          import base64, os, pathlib
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'fatfish-signing.p12'
+          path.write_bytes(base64.b64decode(os.environ['MACOS_SIGNING_P12_BASE64'], validate=True))
+          PY
+          KEYCHAIN_PATH="$RUNNER_TEMP/fatfish-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/fatfish-signing.p12" -k "$KEYCHAIN_PATH" -P "$MACOS_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/fatfish-signing.p12"
       - name: Build, sign and verify DMG
         run: ./build.sh
       - name: Preserve DMG artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: FatFishFairy-${{ github.ref_name }}-arm64
           path: dist/*.dmg
           if-no-files-found: error
           retention-days: 30
+      - name: Remove signing material
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/fatfish-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/fatfish-signing.keychain-db"
+          fi
+          rm -f "$RUNNER_TEMP/fatfish-signing.p12"
 
   publish:
     name: Publish GitHub Release
