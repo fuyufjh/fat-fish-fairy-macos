@@ -10,7 +10,7 @@ case "${1:-}" in
   -h|--help)
     echo "Usage: ./build.sh [--app-only]"
     echo "Default: build dist/FatFishFairy.app and dist/FatFishFairy-<version>-<arch>.dmg"
-    echo "Optional environment: APP_VERSION=1.0.0"
+    echo "Optional environment: APP_VERSION=0.2.0"
     exit 0 ;;
   *) echo "Unknown option: $1" >&2; exit 2 ;;
 esac
@@ -24,9 +24,9 @@ for tool in swift xcrun python3 codesign iconutil ditto hdiutil security openssl
 done
 xcrun --find swift >/dev/null
 
-APP_VERSION="${APP_VERSION:-1.0.0}"
+APP_VERSION="${APP_VERSION:-0.2.0}"
 if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "APP_VERSION must have the form 1.0.0." >&2; exit 2
+  echo "APP_VERSION must have the form 0.2.0." >&2; exit 2
 fi
 # Pin the certificate, not its display name or a changing executable hash.
 CERT="$ROOT/signing/FatFishFairy.cer"

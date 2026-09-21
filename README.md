@@ -12,11 +12,11 @@
 ./build.sh
 ```
 
-输出为 `dist/FatFishFairy.app` 和 `dist/FatFishFairy-1.0.0-arm64.dmg`（Intel Mac 上后缀为 `x86_64`）。打开 DMG，将应用拖到 Applications，然后推出磁盘映像，从「应用程序」启动。安装包不包含 `.secret`、本地对话、记忆或导入的主题。
+输出为 `dist/FatFishFairy.app` 和 `dist/FatFishFairy-0.2.0-arm64.dmg`（Intel Mac 上后缀为 `x86_64`）。打开 DMG，将应用拖到 Applications，然后推出磁盘映像，从「应用程序」启动。安装包不包含 `.secret`、本地对话、记忆或导入的主题。
 
 ```sh
 ./build.sh --app-only                 # 只生成 .app，兼容旧入口 ./scripts/build.sh
-APP_VERSION=1.0.1 ./build.sh           # 自定义版本号
+APP_VERSION=0.2.1 ./build.sh           # 自定义版本号
 ./build.sh --help
 ```
 
@@ -104,8 +104,8 @@ Base URL 支持官方地址、带 `/v1` 的兼容服务地址或完整 `/chat/co
 发布示例（先确认目标提交已推送到 GitHub `main`）：
 
 ```sh
-git tag v1.0.1
-git push origin v1.0.1
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 ### 本地检查
