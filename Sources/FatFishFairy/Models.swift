@@ -35,18 +35,49 @@ struct SavedState: Codable {
     var memories: [FishMemory] = []
 }
 
+struct DiaryEntry: Identifiable {
+    let day: String
+    let content: String
+    var id: String { day }
+}
+
+/// A local workday runs from 04:00 to the next local 04:00, including DST days.
+enum DailyMemo {
+    static let initial = "开始了新的一天"
+    static let characterLimit = 1000
+
+    static func day(for date: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let boundary = calendar.date(bySettingHour: 4, minute: 0, second: 0, of: date)!
+        let day = date < boundary ? calendar.date(byAdding: .day, value: -1, to: boundary)! : boundary
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: day)
+    }
+
+    static func isValid(_ memo: String) -> Bool {
+        !memo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && memo.count <= characterLimit
+    }
+}
+
 struct ModelReply: Decodable {
     let speech: String
     let screenContent: String?
+    let memo: String?
     let activity: String
     let memories: [String]
 
-    enum CodingKeys: String, CodingKey { case speech, screenContent, activity, memories }
+    enum CodingKeys: String, CodingKey { case speech, screenContent, memo, activity, memories }
     init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
         // Require speech: a malformed response must never be treated as intentional silence.
         speech = try fields.decode(String.self, forKey: .speech)
         screenContent = try fields.decodeIfPresent(String.self, forKey: .screenContent)
+        memo = try fields.decodeIfPresent(String.self, forKey: .memo)
         activity = try fields.decodeIfPresent(String.self, forKey: .activity) ?? "idle"
         memories = try fields.decodeIfPresent([String].self, forKey: .memories) ?? []
     }

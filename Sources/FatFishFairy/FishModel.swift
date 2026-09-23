@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @MainActor final class FishModel: ObservableObject {
     @Published var preferences: Preferences
     @Published var messages: [ChatMessage]
+    @Published var diaryEntries: [DiaryEntry] = []
     @Published var memories: [FishMemory]
     @Published var themes = FishTheme.builtins
     @Published var hasOlderMessages = false
@@ -73,6 +74,12 @@ import UniformTypeIdentifiers
             hasOlderMessages = try store.hasMessages(before: messages.first?.id)
             historyRevision = UUID()
         } catch { self.error = "聊天记录加载失败：\(error.localizedDescription)" }
+    }
+
+    func reloadDiary() {
+        guard !loadFailed else { return }
+        do { diaryEntries = try store.diaryEntries() }
+        catch { self.error = "日记加载失败：\(error.localizedDescription)" }
     }
 
     func loadOlderMessages() {
@@ -154,20 +161,26 @@ import UniformTypeIdentifiers
         let configuration = preferences.api
         requestTask = Task {
             do {
+                let observationDate = Date()
+                let observationTimeZone = TimeZone.current
+                let memoDay = DailyMemo.day(for: observationDate, timeZone: observationTimeZone)
                 let images: [Data]
                 if observation { images = try await ScreenCapture.capture(allDisplays: allDisplays) }
                 else { images = attachment.map { [$0] } ?? [] }
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 status = "F · 小肥鱼想一想…"
-                let screenHistory = observation ? try store.screenHistory() : []
+                let memo = observation ? try store.dailyMemo(for: memoDay) : DailyMemo.initial
                 let reply = try await client.respond(key: key, configuration: configuration, personality: personality, systemPrompt: systemPrompt, memories: memoryTexts,
-                                                     history: history, text: text, images: images, observation: observation, activities: actions, screenHistory: screenHistory)
+                                                     history: history, text: text, images: images, observation: observation, activities: actions, memo: memo, date: observationDate, timeZone: observationTimeZone)
                 try Task.checkCancellation()
                 guard generation == requestID else { return }
                 failures = 0; busy = false
                 if observation {
-                    if let content = reply.screenContent { try store.appendScreenContent(content) }
+                    if let memo = reply.memo {
+                        try store.saveDailyMemo(memo, for: memoDay)
+                        reloadDiary()
+                    }
                     lastObservation = Date()
                 }
                 activity = actions.contains(reply.activity) ? reply.activity : actions[0]

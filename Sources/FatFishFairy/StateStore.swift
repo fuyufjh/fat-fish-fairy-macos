@@ -24,7 +24,7 @@ final class StateStore {
         try execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         try execute("CREATE TABLE IF NOT EXISTS messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, role TEXT NOT NULL, text TEXT NOT NULL, date REAL NOT NULL, observation INTEGER NOT NULL)")
         try execute("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT NOT NULL, date REAL NOT NULL)")
-        try execute("CREATE TABLE IF NOT EXISTS screen_observations (seq INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL)")
+        try execute("CREATE TABLE IF NOT EXISTS daily_memos (day TEXT PRIMARY KEY, content TEXT NOT NULL)")
         // Import and completion marker commit together. A bad legacy file is left untouched.
         try transaction {
             if try rows("SELECT value FROM metadata WHERE key = 'initialized'").isEmpty {
@@ -64,16 +64,20 @@ final class StateStore {
         try open()
         try transaction { try write(state) }
     }
-    func screenHistory() throws -> [String] {
+    func diaryEntries() throws -> [DiaryEntry] {
         try open()
-        return try rows("SELECT content FROM screen_observations ORDER BY seq DESC LIMIT 3").reversed().map { $0[0] }
-    }
-    func appendScreenContent(_ content: String) throws {
-        try open()
-        try transaction {
-            try execute("INSERT INTO screen_observations(content) VALUES(?)", [content])
-            try execute("DELETE FROM screen_observations WHERE seq NOT IN (SELECT seq FROM screen_observations ORDER BY seq DESC LIMIT 3)")
+        return try rows("SELECT day,content FROM daily_memos ORDER BY day DESC").map {
+            DiaryEntry(day: $0[0], content: $0[1])
         }
+    }
+    func dailyMemo(for day: String) throws -> String {
+        try open()
+        return try rows("SELECT content FROM daily_memos WHERE day = ?", [day]).first?.first ?? DailyMemo.initial
+    }
+    func saveDailyMemo(_ memo: String, for day: String) throws {
+        guard DailyMemo.isValid(memo) else { throw ModelOutputError.schema }
+        try open()
+        try execute("INSERT INTO daily_memos(day,content) VALUES(?,?) ON CONFLICT(day) DO UPDATE SET content=excluded.content", [day, memo])
     }
     private func write(_ state: SavedState) throws {
         let preferences = String(decoding: try JSONEncoder().encode(state.preferences), as: UTF8.self)

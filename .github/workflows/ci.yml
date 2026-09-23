@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: App version (for example 0.2.0)
+        description: App version (for example 0.3.0)
         required: true
-        default: '0.2.0'
+        default: '0.3.0'
 
 permissions:
   contents: read
@@ -68,7 +68,7 @@ jobs:
           rm -f "$RUNNER_TEMP/fatfish-signing.p12"
       - name: Build and verify signed DMG
         env:
-          APP_VERSION: ${{ inputs.version || '0.2.0' }}
+          APP_VERSION: ${{ inputs.version || '0.3.0' }}
         run: ./build.sh
       - name: Upload installer
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

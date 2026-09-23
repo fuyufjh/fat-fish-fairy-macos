@@ -14,15 +14,15 @@ enum PromptBuilder {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
-    static func messages(systemPrompt: String? = nil, character: String, memories: [String], activities: [String], example: String, observation: Bool = false, date: Date = Date()) throws -> [[String: Any]] {
+    static func messages(systemPrompt: String? = nil, character: String, memories: [String], activities: [String], example: String, observation: Bool = false, date: Date = Date(), timeZone: TimeZone = .current) throws -> [[String: Any]] {
         let clock = DateFormatter()
         clock.locale = Locale(identifier: "en_US_POSIX")
         clock.calendar = Calendar(identifier: .gregorian)
-        clock.timeZone = .current
+        clock.timeZone = timeZone
         clock.dateFormat = "yyyy-MM-dd HH:mm:ss XXX"
         var system = try systemPrompt ?? defaultSystemPrompt()
         // Substitute template fields before adding character text; persona cannot change the template.
-        for (name, value) in [("currentTime", clock.string(from: date)), ("timeZone", TimeZone.current.identifier),
+        for (name, value) in [("currentTime", clock.string(from: date)), ("timeZone", timeZone.identifier),
                               ("mode", observation ? "自动或主动观察屏幕：根据当前截图决定是否发言" : "用户主动对话：回应用户的问题或附图"),
                               ("example", example), ("activities", activities.joined(separator: ", ")),
                               ("memories", memories.joined(separator: "；"))] {

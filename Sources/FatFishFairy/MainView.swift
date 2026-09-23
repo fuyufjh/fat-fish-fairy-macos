@@ -17,6 +17,7 @@ struct MainView: View {
                     }
                 }.padding(.bottom, 30).padding(.top, 14)
                 nav("chat", "聊两句", "bubble.left.and.bubble.right")
+                nav("diary", "日记", "book.closed")
                 nav("memory", "小鱼的记忆", "sparkles")
                 nav("appearance", "桌面形象", "paintpalette")
                 nav("settings", "设置", "slider.horizontal.3")
@@ -50,6 +51,7 @@ struct MainView: View {
                 }
                 Group {
                     switch selection {
+                    case "diary": diaryView
                     case "memory": memoryView
                     case "appearance": appearanceView
                     case "settings": settingsView
@@ -60,8 +62,8 @@ struct MainView: View {
         }.foregroundStyle(ink).tint(ocean).frame(minWidth: 830, minHeight: 630)
             .preferredColorScheme(.light)
     }
-    private var title: String { ["chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "桌面形象", "settings": "舒服地待在你身边。"][selection]! }
-    private var subtitle: String { ["chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "选择你的桌面伙伴，调整合适的大小。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
+    private var title: String { ["diary": "日记", "chat": "今天，也一起摸鱼。", "memory": "你说的，我记着呢。", "appearance": "桌面形象", "settings": "舒服地待在你身边。"][selection]! }
+    private var subtitle: String { ["diary": "记下每天做过的事，也留住一点进展。", "chat": "一只会看屏幕、会聊天，还有点小脾气的桌面伙伴。", "memory": "只记住你主动分享的偏好，随时可以忘掉。", "appearance": "选择你的桌面伙伴，调整合适的大小。", "settings": "让陪伴的节奏，刚刚好。"][selection]! }
     private func nav(_ id: String, _ label: String, _ icon: String) -> some View {
         Button { selection = id } label: {
             HStack(spacing: 11) { Image(systemName: icon).frame(width: 18); Text(label); Spacer() }
@@ -141,6 +143,34 @@ struct MainView: View {
     }
     private func suggestion(_ text: String) -> some View {
         Button(text) { model.draft = text; model.send() }.font(.system(size: 11)).buttonStyle(.bordered).disabled(model.busy)
+    }
+    private var diaryView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                Label("每天凌晨 4 点开启新的一页 · 最新日期在前", systemImage: "clock")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                if model.diaryEntries.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "book.closed").font(.largeTitle).foregroundStyle(ocean)
+                        Text("日记还没开始").font(.headline)
+                        Text("看一眼屏幕，或开启自动观察，\n小鱼就会慢慢记下你每天做过的事。")
+                            .font(.system(size: 13)).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center).lineSpacing(5)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 55)
+                }
+                ForEach(model.diaryEntries) { entry in
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label(entry.day, systemImage: "calendar")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(ocean)
+                        Text(entry.content)
+                            .font(.system(size: 13)).lineSpacing(6).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }.padding(26)
+        }.onAppear { model.reloadDiary() }
     }
     private var memoryView: some View {
         ScrollView {
@@ -277,7 +307,7 @@ private struct SystemPromptSettingsView: View {
             TextEditor(text: $text).font(.system(size: 12, design: .monospaced))
                 .frame(height: 250).padding(8).background(Color.black.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityLabel("系统提示词编辑框")
-            Text("可保留动态字段：{{currentTime}}、{{timeZone}}、{{mode}}、{{example}}、{{activities}}、{{memories}}。回复需包含 speech、activity、memories，便于应用解析。")
+            Text("可保留动态字段：{{currentTime}}、{{timeZone}}、{{mode}}、{{example}}、{{activities}}、{{memories}}。回复需包含 speech、activity、memories；读屏时还需包含 screenContent 和不超过 1000 字符的完整当日 memo。")
                 .font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
             HStack {
                 Button("保存系统提示词") {
